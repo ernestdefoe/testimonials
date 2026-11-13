@@ -5,7 +5,6 @@ import type Testimonial from './Testimonial';
 export const EXT = 'ernestdefoe-testimonials';
 
 export const t = (key: string, params: Record<string, any> = {}) => app.translator.trans(`${EXT}.forum.${key}`, params);
-export const tl = (key: string, params: Record<string, any> = {}) => app.translator.trans(`${EXT}.lib.${key}`, params);
 export const tx = (key: string, params: Record<string, any> = {}) => extractText(t(key, params));
 
 export const api = (path: string) => `${app.forum.attribute('apiUrl')}/${path}`;
