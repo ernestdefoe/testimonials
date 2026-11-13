@@ -59,8 +59,7 @@ class Moderation
                 if ($action === 'feature') {
                     $row->is_featured = true;
                     $row->featured_order = (int) Testimonial::query()->where('is_featured', true)->max('featured_order') + 1;
-                    $until = $in['until'] ?? null;
-                    $row->featured_until = $until ? Carbon::parse((string) $until) : null;
+                    $row->featured_until = $this->until($in['until'] ?? null);
                 }
                 $row->save();
                 $this->notifications->delete(new Notification\DeclinedBlueprint($row));
@@ -162,5 +161,23 @@ class Moderation
             }
         }
         $row->featured_order = array_search($row->id, $ids, true) + 1;
+    }
+
+    /** "Feature until": a date in the future, or none. Anything else is refused, not a 500. */
+    private function until(mixed $value): ?Carbon
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        try {
+            $date = Carbon::parse((string) $value);
+        } catch (\Throwable) {
+            throw new Refusal('until');
+        }
+        if ($date->isPast()) {
+            throw new Refusal('until');
+        }
+
+        return $date;
     }
 }

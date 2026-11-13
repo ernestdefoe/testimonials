@@ -217,6 +217,8 @@ class TestimonialsTest extends TestCase
         [, $list] = $this->call('GET', '/api/testimonials', null);
         $this->assertContains(3, $this->ids($list));
 
+        [$status, $json] = $this->call('POST', '/api/testimonials/3/moderate', 5, ['action' => 'feature', 'until' => 'not a date']);
+        $this->assertSame('until', $json['errors'][0]['code'] ?? null, (string) $status);
         $this->call('POST', '/api/testimonials/3/moderate', 5, ['action' => 'feature']);
         [, $featured] = $this->call('GET', '/api/testimonials?filter[featured]=1', null);
         $this->assertSame([1, 3], $this->ids($featured));
