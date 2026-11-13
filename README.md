@@ -4,7 +4,7 @@ What your members say about your community, a tag or a download, gathered with c
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg) [![Latest Stable Version](https://img.shields.io/packagist/v/ernestdefoe/testimonials.svg)](https://packagist.org/packages/ernestdefoe/testimonials)
 
-![The Testimonials page](screenshots/page-1280-light.png)
+![The Testimonials page](screenshots/page.png)
 
 - **Share your experience.** Members write a few sentences, an optional headline, one to five stars, and a rating for each aspect you choose (Customer service, Quality, Value and Speed of support to start; add, rename, reorder or remove them). A preview shows the card as others will see it.
 - **About something.** The community, a tag, a download ([Depot](https://ernestdefoe.online/downloads/f/depot)), or one of their own posts ("Use as a testimonial" in the post's menu starts from the post's words).
@@ -18,9 +18,11 @@ What your members say about your community, a tag or a download, gathered with c
 - **Renown.** With [Renown](https://ernestdefoe.online/downloads/f/renown), an approved testimonial earns XP.
 - **Light and private.** A page of testimonials costs the same few queries however many there are. Guests share one cached rating summary, rebuilt on any change. Widgets load after the page is drawn, share their requests, and the page, queue and form load only when opened. Themes and dark mode carry through: every colour comes from Flarum's own.
 
-![The moderation queue](screenshots/queue-1280-light.png)
+![The moderation queue](screenshots/queue.png)
 
-![Share your experience](screenshots/share-1280-light.png)
+![Share your experience](screenshots/share.png)
+
+![The widgets in a Page Builder page](screenshots/page-builder.png)
 
 ## Install
 
