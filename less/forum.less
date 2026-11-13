@@ -906,7 +906,8 @@ html:not(#x-hi) .QueueRow-decline { color: var(--alert-error-bg, #d83e3e); }
   &.is-on { border-color: var(--primary-color); }
 }
 .ShareTestimonial .ShareTestimonial-consent { gap: 12px; }
-.ShareTestimonial-consent .checkbox {
+// Themes bold every form label (Bespoke: `.Form-group label`): the consent lines are sentences.
+html:not(#x-hi) .ShareTestimonial .ShareTestimonial-consent label.checkbox {
   display: flex;
   gap: 10px;
   align-items: flex-start;
