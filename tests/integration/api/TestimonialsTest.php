@@ -119,7 +119,9 @@ class TestimonialsTest extends TestCase
             $this->assertNull($author['username']);
             $this->assertNull($author['avatarUrl']);
             $this->assertArrayNotHasKey('id', $author);
-            $this->assertSame('2021', $author['since']);
+            $this->assertNull($author['since'], 'not even the year they joined');
+            [, , $raw] = $this->call('GET', '/api/testimonials/2', $viewer);
+            $this->assertStringNotContainsString('2021', $raw);
         }
 
         // Its author and moderators see who wrote it.

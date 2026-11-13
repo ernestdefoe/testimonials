@@ -10,7 +10,7 @@ use Illuminate\Database\ConnectionInterface;
  * one says the same thing. The resource owns it and primes a whole page of rows at once.
  *
  * 🚨 The byline is enforced here, not in the browser: an anonymous testimonial carries no name,
- * picture, username or id for anyone but its author and moderators; "first name only" carries the
+ * picture, username, id or join year for anyone but its author and moderators; "first name only" carries the
  * first word of the display name and no picture or username.
  */
 class Presenter
@@ -66,7 +66,8 @@ class Presenter
             'first' => ['name' => strtok($name, " \t") ?: $name, 'avatarUrl' => null, 'username' => null, 'anonymous' => false],
             default => ['name' => null, 'avatarUrl' => null, 'username' => null, 'anonymous' => true],
         };
-        $out['since'] = $since;
+        // Anonymous means anonymous: not even the year they joined (on a small forum it narrows it down).
+        $out['since'] = $out['anonymous'] ? null : $since;
 
         if (self::canModerate($actor) && $user) {
             $out['id'] = (int) $user->id;

@@ -316,8 +316,7 @@ export default class ShareModal extends FormModal<ShareModalAttrs> {
       ['first', tx('share.byline_first'), name.split(/\s+/)[0]],
     ];
     if (app.forum.attribute('testimonialsAnonymous') !== false) {
-      const since = user.joinTime() ? String(user.joinTime()!.getFullYear()) : '';
-      options.push(['anonymous', tx('share.byline_anonymous'), since ? tx('byline.since', { year: since }) : '']);
+      options.push(['anonymous', tx('share.byline_anonymous'), tx('byline.anonymous')]);
     }
     return (
       <fieldset className="Form-group ShareTestimonial-byline">
@@ -376,7 +375,7 @@ export default class ShareModal extends FormModal<ShareModalAttrs> {
           )}
           <div className="TestimonialByline-text">
             <span className="TestimonialByline-name">{name}</span>
-            <span className="TestimonialByline-meta">{since ? t('byline.since', { year: since }) : null}</span>
+            <span className="TestimonialByline-meta">{since && this.byline !== 'anonymous' ? t('byline.since', { year: since }) : null}</span>
           </div>
         </div>
       </article>

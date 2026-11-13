@@ -8,7 +8,7 @@ What your members say about your community, a tag or a download, gathered with c
 
 - **Share your experience.** Members write a few sentences, an optional headline, one to five stars, and a rating for each aspect you choose (Customer service, Quality, Value and Speed of support to start; add, rename, reorder or remove them). A preview shows the card as others will see it.
 - **About something.** The community, a tag, a download ([Depot](https://ernestdefoe.online/downloads/f/depot)), or one of their own posts ("Use as a testimonial" in the post's menu starts from the post's words).
-- **Their name, their choice.** Name and picture, first name only, or anonymous. Anonymous means anonymous in the API too: no name, picture, username or id for anyone but moderators.
+- **Their name, their choice.** Name and picture, first name only, or anonymous. Anonymous means anonymous in the API too: no name, picture, username, id or join year for anyone but moderators.
 - **Consent first.** Nothing is shown without the member ticking "Show this on the forum". A second, optional box says it's OK to feature it outside the forum; that's a badge for staff, nothing is posted anywhere.
 - **Moderated.** Everything waits in a queue: approve, approve and feature, fix the wording (the member is told), decline with a reason the member sees, or mark as spam. Bulk actions, and J/K/A/F/D on the keyboard. A permission lets trusted groups skip the queue.
 - **Members stay in control.** Profile → Testimonials lists theirs with what happened to each. They can edit (it's read again), take it down at once, and bring it back within 30 days.

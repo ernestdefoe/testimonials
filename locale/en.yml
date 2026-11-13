@@ -109,7 +109,7 @@ ernestdefoe-testimonials:
       byline_first: First name only
       byline_anonymous: Anonymous
       first_help: Only your first name goes with it, with no picture or link to your profile.
-      anonymous_help: Nobody but moderators can tell it was you, not even from the page source.
+      anonymous_help: Nobody but moderators can tell it was you, not even from the page source. Not even the year you joined is shown.
       consent: Show this on the forum and its public pages. I can take it down any time from my profile.
       consent_external: It's OK to feature this outside the forum too, like on the homepage or a social post. (Optional)
       footer: A moderator reads every testimonial before it goes live. You'll get a notification either way.
