@@ -131,6 +131,8 @@ app.initializers.add('ernestdefoe-testimonials', () => {
   // the index sidebar, a carousel at the top of the list. Each stands down while a host shows the same kind.
   extend('flarum/forum/components/IndexSidebar', 'items', function (items: ItemList<Mithril.Children>) {
     if (!app.forum.attribute('testimonialsStockSidebar') || hostedElsewhere('rating')) return;
+    // Not beside the Testimonials page or queue: the page has its own score (on phones the sidebar sits above it).
+    if (String(app.current.get('routeName') || '').startsWith('testimonials')) return;
     items.add('testimonialsRating', <TestimonialsWidget kind="rating" host="stock-sidebar" />, -60);
   });
   extend('flarum/forum/components/IndexPage', 'contentItems', function (items: ItemList<Mithril.Children>) {
