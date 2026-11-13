@@ -781,10 +781,24 @@ html:not(#x-hi) .QueueRow-decline { color: var(--alert-error-bg, #d83e3e); }
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;
 }
-.ShareTestimonial-form { min-width: 0; }
-// Flarum 2's .Form-group is a centred flex column: our groups use the full width.
-.ShareTestimonial .Form-group { align-items: stretch; text-align: left; }
-.ShareTestimonial-note { margin: 0 0 18px; color: var(--muted-color); }
+// 🚨 Flarum 2 spaces form groups with the gap of a `.Form` wrapper, which this form doesn't have:
+// without our own gap every group sits flush against the one above. And .Form-group is a centred
+// flex column: our groups use the full width.
+.ShareTestimonial-form {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.ShareTestimonial .Form-group {
+  margin: 0;
+  gap: 8px;
+  align-items: stretch;
+  text-align: left;
+  > label { margin: 0; font-weight: 600; }
+  .helpText { margin: 0; }
+}
+.ShareTestimonial-note { margin: 0; color: var(--muted-color); }
 .ShareTestimonial-optional { font-weight: 400; color: var(--muted-color); }
 .ShareTestimonial-subject legend,
 .ShareTestimonial-byline legend { font-weight: 600; margin-bottom: 8px; padding: 0; }
@@ -833,7 +847,7 @@ html:not(#x-hi) .QueueRow-decline { color: var(--alert-error-bg, #d83e3e); }
     &:hover, &:focus-visible { background: var(--control-bg); }
   }
 }
-.ShareTestimonial-ratings { display: flex; flex-direction: column; gap: 6px; }
+.ShareTestimonial .ShareTestimonial-ratings { gap: 4px; }
 .ShareTestimonial-aspects {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(~"min(240px, 100%)", 1fr));
@@ -891,11 +905,23 @@ html:not(#x-hi) .QueueRow-decline { color: var(--alert-error-bg, #d83e3e); }
   > span > span { font-size: 12.5px; color: var(--muted-color); overflow-wrap: anywhere; }
   &.is-on { border-color: var(--primary-color); }
 }
-.ShareTestimonial-consent .checkbox { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 8px; }
+.ShareTestimonial .ShareTestimonial-consent { gap: 12px; }
+.ShareTestimonial-consent .checkbox {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.45;
+  input { margin-top: 3px; flex: none; }
+}
 .ShareTestimonial .Form-group.ShareTestimonial-actions {
   display: flex;
   flex-direction: row;
   align-items: center;
+  padding-top: 18px;
+  border-top: 1px solid var(--control-bg);
   gap: 14px;
   .helpText { margin: 0; flex: 1; min-width: 0; }
   .Button { flex: none; }
