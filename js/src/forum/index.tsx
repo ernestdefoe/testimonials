@@ -9,7 +9,7 @@ import type Mithril from 'mithril';
 import Testimonial from './Testimonial';
 import TestimonialsWidget, { startTicker } from './widgets/Widget';
 import { hostedElsewhere } from './widgets/placement';
-import { registerHosts } from './widgets/hosts';
+import { registerHosts, registerPageBuilder } from './widgets/hosts';
 import { openShare, ui } from './share';
 import { t } from './util';
 
@@ -59,6 +59,13 @@ function nudgeDismissed(): boolean {
 
 app.initializers.add('ernestdefoe-testimonials', () => {
   app.store.models.testimonials = Testimonial;
+
+  // Queued for Page Builder now: it picks them up whenever it looks, whichever of us starts first.
+  try {
+    registerPageBuilder();
+  } catch (e) {
+    console.warn('[testimonials] Page Builder registration failed', e);
+  }
 
   app.routes['testimonials'] = {
     path: '/testimonials',

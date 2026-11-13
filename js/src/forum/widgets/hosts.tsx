@@ -4,8 +4,9 @@ import TestimonialsWidget, { type Kind } from './Widget';
 import { bespokeSchema } from './settings';
 
 /*
- * Offers the four widgets to every widget host that is present: fof/forum-widgets-core, Bespoke
- * and Page Builder. None is a build-time import; each is found at runtime, so the bundle is the
+ * Offers the four widgets to every widget host that is present: fof/forum-widgets-core and Bespoke
+ * (from an app.mount override, after every initializer), and Page Builder (through its queue, from
+ * our initializer). None is a build-time import; each is found at runtime, so the bundle is the
  * same with all three installed or none. Registering is not placing: the stock spots stand down
  * only for a mounted copy (placement.ts).
  */
@@ -22,7 +23,7 @@ export const WIDGETS: Array<{ kind: Kind; key: string; icon: string; zones: stri
 const titleKey = (kind: Kind) => `${EXT}.lib.widget.${kind}_title`;
 
 export function registerHosts(): void {
-  for (const register of [registerFof, registerBespoke, registerPageBuilder]) {
+  for (const register of [registerFof, registerBespoke]) {
     try {
       register();
     } catch (e) {
@@ -86,14 +87,22 @@ function registerBespoke(): void {
   );
 }
 
-function registerPageBuilder(): void {
-  const pb = (app as any).pageBuilder;
-  if (!pb?.registerBlock) return;
-
-  // Match Widget\*Block::type().
-  WIDGETS.forEach(({ kind }) =>
-    pb.registerBlock(`testimonials-${kind}`, {
+export function registerPageBuilder(): void {
+  // 🚨 Order-proof: Page Builder (3.10+) drains `window.PageBuilderBlockQueue` on every lookup, so
+  // these register whichever extension initializes first. `app.pageBuilder` only exists once Page
+  // Builder's own initializer has run, so calling it directly alone was a coin toss.
+  const blocks = WIDGETS.map(({ kind }) => ({
+    // Match Widget\*Block::type().
+    type: `testimonials-${kind}`,
+    component: {
       view: (vnode: any) => <TestimonialsWidget kind={kind} host="page-builder" settings={vnode.attrs?.settings || {}} />,
-    })
-  );
+    },
+  }));
+  const queue = ((globalThis as any).PageBuilderBlockQueue = (globalThis as any).PageBuilderBlockQueue || []);
+  queue.push(...blocks);
+
+  // Page Builder before 3.10 has no queue: register directly when it's already there.
+  // (On 3.10+ the type registered first wins, so the queued copy is skipped, not doubled.)
+  const pb = (app as any).pageBuilder;
+  if (pb?.registerBlock) blocks.forEach(({ type, component }) => pb.registerBlock(type, component));
 }
