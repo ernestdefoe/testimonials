@@ -9,11 +9,15 @@ use ErnestDefoe\Testimonials\Testimonial;
 use Illuminate\Database\ConnectionInterface;
 
 /**
- * Depot reviews shown as testimonials. A review with words in it is mirrored as one live
- * testimonial about its download (source `depot`), kept in step on every review save and
- * delete, and the whole set re-checked daily (testimonials:sync-depot). Reviews are already
- * public on Depot, so mirrors go live as they are; the reviewer can take theirs out of the
- * widgets (hidden_by_author), and the admin can switch the source off (Testimonial::live).
+ * Depot reviews shown as testimonials. A review rated 4★ or more, with words in it, is mirrored
+ * as one live testimonial about its download (source `depot`), kept in step on every review save
+ * and delete, and the whole set re-checked daily (testimonials:sync-depot). Edited below 4★ or
+ * emptied, the mirror goes.
+ *
+ * 🚨 Reviewers never agreed to a testimonial. Depot has no consent field, so a mirror is shown on
+ * the forum only: `consent_external` is always false (never featured outside the forum), the
+ * byline is the name Depot already shows beside the review, the reviewer can take theirs out of
+ * the widgets (hidden_by_author), and the admin can switch the source off (Testimonial::live).
  *
  * Only loaded when Depot is installed (extend.php checks first).
  */
@@ -25,12 +29,15 @@ class Mirror
     ) {
     }
 
+    /** The lowest rating a Depot review needs to show as a testimonial. */
+    public const MIN_RATING = 4;
+
     public function sync(Review $review, bool $announce = true): void
     {
         $body = trim((string) $review->body);
         $row = Testimonial::query()->where('source', 'depot')->where('source_id', $review->id)->first();
 
-        if ($body === '') {
+        if ($body === '' || (int) $review->rating < self::MIN_RATING) {
             $row?->delete();
         } else {
             $row ??= new Testimonial(['source' => 'depot', 'source_id' => $review->id, 'status' => 'approved', 'byline' => 'full']);
@@ -42,6 +49,8 @@ class Mirror
                 'body' => mb_substr($body, 0, 2000),
                 'rating' => max(1, min(5, (int) $review->rating)),
                 'consent_at' => $at,
+                // Depot never asked: on the forum only, never outside it.
+                'consent_external' => false,
                 'approved_at' => $row->approved_at ?? $at,
             ]);
             if (! $row->exists) {

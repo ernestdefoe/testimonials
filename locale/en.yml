@@ -6,7 +6,7 @@ ernestdefoe-testimonials:
       anonymous: Allow anonymous testimonials
       anonymous_help: Members can choose to show no name at all. Moderators always see who wrote it.
       depot_source: Show Depot reviews as testimonials
-      depot_source_help: Every Depot review with words in it counts toward its download's rating and shows on the Testimonials page. Reviewers can take theirs out of the widgets from their profile.
+      depot_source_help: Depot reviews rated 4 stars or more, with words in them, show as testimonials about their download. Depot never asked reviewers for consent, so these show on the forum only and are never marked OK to feature outside it. A review edited below 4 stars or deleted is taken down at once, and reviewers can hide theirs from the widgets in their profile.
       min_length: Shortest testimonial (characters)
       max_length: Longest testimonial (characters)
       min_posts: Posts needed before writing one
