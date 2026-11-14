@@ -145,13 +145,10 @@ $extenders = [
                 ->listen('eloquent.deleted: ErnestDefoe\\Depot\\Model\\Review', fn ($event, $models = null) => resolve(\ErnestDefoe\Testimonials\Depot\Mirror::class)->remove(is_object($event) ? $event : $models[0]))
                 ->listen('eloquent.deleted: ErnestDefoe\\Depot\\Model\\File', fn ($event, $models = null) => resolve(Cleanup::class)->subject('depot', (int) (is_object($event) ? $event : $models[0])->id)),
         ]),
-];
 
-// The Page Builder blocks only offer the widgets in its editor; the client fetches like every other host.
-if (class_exists(\Ernestdefoe\PageBuilder\Extend\PageBuilderBlock::class)) {
-    foreach (['Carousel', 'Wall', 'Spotlight', 'Rating'] as $block) {
-        $extenders[] = new \Ernestdefoe\PageBuilder\Extend\PageBuilderBlock('ErnestDefoe\\Testimonials\\Widget\\'.$block.'Block');
-    }
-}
+    // The Page Builder blocks only offer the widgets in its editor; the client fetches like every other host.
+    (new Extend\Conditional())
+        ->whenExtensionEnabled('ernestdefoe-page-builder', fn () => \ErnestDefoe\Testimonials\Widget\Blocks::extenders()),
+];
 
 return $extenders;

@@ -4,17 +4,20 @@ namespace ErnestDefoe\Testimonials;
 
 use Carbon\Carbon;
 use Flarum\User\User;
+use Illuminate\Contracts\Cache\Repository as Cache;
 
 /**
  * The "share your experience" card: off unless the admin turns it on; then shown to members who
- * may write one, have posted and stayed long enough, and haven't written one yet (one EXISTS
- * query, only once the cheap checks pass). Dismissing it is the browser's business.
+ * may write one, have posted and stayed long enough, and haven't written one yet. That last check
+ * is cached per member (forgotten when they write or delete one), so the forum payload doesn't
+ * query on every page load. Dismissing it is the browser's business.
  */
 class Nudge
 {
     public function __construct(
         private readonly Settings $settings,
         private readonly Access $access,
+        private readonly Cache $cache,
     ) {
     }
 
@@ -31,6 +34,12 @@ class Nudge
             return false;
         }
 
-        return ! Testimonial::query()->where('user_id', $actor->id)->where('source', 'native')->exists();
+        return ! $this->cache->remember(self::key($actor->id), 86400, fn () => Testimonial::query()
+            ->where('user_id', $actor->id)->where('source', 'native')->exists());
+    }
+
+    public static function key(int $userId): string
+    {
+        return 'ernestdefoe-testimonials.wrote.'.$userId;
     }
 }

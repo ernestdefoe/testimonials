@@ -1,5 +1,6 @@
 import app from 'flarum/forum/app';
 import { extend, override } from 'flarum/common/extend';
+import Extend from 'flarum/common/extenders';
 import type ItemList from 'flarum/common/utils/ItemList';
 import LinkButton from 'flarum/common/components/LinkButton';
 import Button from 'flarum/common/components/Button';
@@ -47,6 +48,19 @@ function notificationComponent(type: string) {
   };
 }
 
+const page = (pick: (chunk: any) => any) => () => ui().then(async (chunk) => (await chunk.loadCore(), { default: pick(chunk) }));
+
+const extenders = [
+  new Extend.Store().add('testimonials', Testimonial),
+  new Extend.Routes()
+    .add('testimonials', '/testimonials', page((chunk) => chunk.TestimonialsPage))
+    .add('testimonials.queue', '/testimonials/queue', page((chunk) => chunk.QueuePage))
+    .add('user.testimonials', '/u/:username/testimonials', () => ui().then(async (chunk) => ({ default: await chunk.userTestimonialsPage() }))),
+  Object.keys(NOTIFICATIONS).reduce((ext, type) => ext.add(type, notificationComponent(type)), new Extend.Notification()),
+];
+
+export { extenders as extend };
+
 const NUDGE_KEY = 'ernestdefoe-testimonials.nudge-dismissed';
 
 function nudgeDismissed(): boolean {
@@ -58,29 +72,12 @@ function nudgeDismissed(): boolean {
 }
 
 app.initializers.add('ernestdefoe-testimonials', () => {
-  app.store.models.testimonials = Testimonial;
-
   // Queued for Page Builder now: it picks them up whenever it looks, whichever of us starts first.
   try {
     registerPageBuilder();
   } catch (e) {
     console.warn('[testimonials] Page Builder registration failed', e);
   }
-
-  app.routes['testimonials'] = {
-    path: '/testimonials',
-    component: () => ui().then(async (chunk) => (await chunk.loadCore(), { default: chunk.TestimonialsPage })),
-  };
-  app.routes['testimonials.queue'] = {
-    path: '/testimonials/queue',
-    component: () => ui().then(async (chunk) => (await chunk.loadCore(), { default: chunk.QueuePage })),
-  };
-  app.routes['user.testimonials'] = {
-    path: '/u/:username/testimonials',
-    component: () => ui().then(async (chunk) => ({ default: await chunk.userTestimonialsPage() })),
-  };
-
-  Object.keys(NOTIFICATIONS).forEach((type) => (app.notificationComponents[type] = notificationComponent(type)));
 
   // String form: these live in lazy chunks, and extending an imported copy patches one core never renders.
   extend('flarum/forum/components/NotificationGrid', 'notificationTypes', function (items: ItemList<any>) {

@@ -308,6 +308,27 @@ class TestimonialsTest extends TestCase
     }
 
     #[Test]
+    public function the_nudge_stops_once_a_member_has_written_one(): void
+    {
+        $this->setting('ernestdefoe-testimonials.nudge', '1');
+        $this->setting('ernestdefoe-testimonials.nudge_posts', '0');
+        $this->setting('ernestdefoe-testimonials.nudge_days', '0');
+
+        $nudge = function (int $as): ?bool {
+            [, $json] = $this->call('GET', '/api', $as);
+
+            return $json['data']['attributes']['testimonialsNudge'] ?? null;
+        };
+
+        $this->assertTrue($nudge(2));
+        $this->assertFalse($nudge(3));
+
+        // The answer is cached; writing one forgets it, so the next page load stops nudging.
+        $this->call('POST', '/api/testimonials', 2, ['body' => self::QUOTE, 'consent' => true]);
+        $this->assertFalse($nudge(2));
+    }
+
+    #[Test]
     public function the_list_costs_the_same_queries_for_one_or_twenty_four(): void
     {
         $count = function (): int {

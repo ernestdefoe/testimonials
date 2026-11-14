@@ -66,7 +66,10 @@
                 "flarum/gdpr",
                 "ernestdefoe/depot",
                 "ernestdefoe/renown",
-                "ernestdefoe/trust-levels"
+                "ernestdefoe/trust-levels",
+                "ernestdefoe/bespoke",
+                "ernestdefoe/page-builder",
+                "fof/forum-widgets-core"
             ]
         }
     },

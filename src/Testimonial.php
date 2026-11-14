@@ -51,6 +51,18 @@ class Testimonial extends AbstractModel
     // AbstractModel turns timestamps off; this table has them.
     public $timestamps = true;
 
+    protected static function booted(): void
+    {
+        // Nudge caches whether a member has written one; a new or deleted row makes it ask again.
+        $forget = function (self $row): void {
+            if ($row->user_id) {
+                resolve(\Illuminate\Contracts\Cache\Repository::class)->forget(Nudge::key((int) $row->user_id));
+            }
+        };
+        static::created($forget);
+        static::deleted($forget);
+    }
+
     protected $casts = [
         'rating' => 'integer',
         'consent_at' => 'datetime',
