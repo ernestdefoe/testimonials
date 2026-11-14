@@ -30,7 +30,13 @@ export function moderate(row: Testimonial, action: string, extra: Record<string,
   return app
     .request<any>({ method: 'POST', url: api(`testimonials/${row.id()}/moderate`), body: { action, ...extra }, errorHandler: alertError })
     .then((payload) => {
-      const model = app.store.pushPayload(payload) as unknown as Testimonial;
+      // The server has said yes: nothing after this may turn it into a failure on screen.
+      let model = row;
+      try {
+        model = app.store.pushPayload(payload) as unknown as Testimonial;
+      } catch (e) {
+        console.error('[testimonials] could not read the answer', e);
+      }
       changed();
       return model;
     });
@@ -42,7 +48,13 @@ export function onChange(fn: () => void): void {
   listeners.push(fn);
 }
 export function changed(): void {
-  listeners.forEach((fn) => fn());
+  listeners.forEach((fn) => {
+    try {
+      fn();
+    } catch (e) {
+      console.error('[testimonials] a refresh failed', e);
+    }
+  });
 }
 
 /** Day of the year: today's featured testimonial is the same for everyone today. */

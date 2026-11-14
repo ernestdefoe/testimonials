@@ -508,7 +508,8 @@ html:not(#x-hi) .TestimonialsWidget-more {
 
 // ── Page, queue, profile ─────────────────────────────────────────────────────
 
-.TestimonialsNav-count {
+.TestimonialsNav-count,
+.TestimonialsNav-queue[data-count]::after {
   display: inline-block;
   min-width: 18px;
   margin-left: 6px;
@@ -521,6 +522,7 @@ html:not(#x-hi) .TestimonialsWidget-more {
   background: var(--primary-color);
   color: var(--button-primary-color, #fff);
 }
+.TestimonialsNav-queue[data-count]::after { content: attr(data-count); }
 
 .TestimonialsPage-hero {
   display: grid;

@@ -8,7 +8,7 @@ import type Mithril from 'mithril';
 import type Testimonial from '../Testimonial';
 import { Card, Stars } from '../widgets/ui';
 import type { Summary } from '../widgets/data';
-import { api, changed, onChange, t, tx } from '../util';
+import { api, onChange, t, tx } from '../util';
 import { openShare } from '../share';
 import { IndexSidebar, PageStructure } from './core';
 import Controls from './Controls';
@@ -111,7 +111,7 @@ export default class TestimonialsPage extends Page {
             </h2>
             <div className="TestimonialsPage-featuredGrid">
               {this.featured.map((row) => (
-                <Card row={row} large footer={<Controls row={row} onchange={changed} />} />
+                <Card row={row} large footer={<Controls row={row} />} />
               ))}
             </div>
           </section>
@@ -121,7 +121,7 @@ export default class TestimonialsPage extends Page {
           {this.rows.length ? (
             <div className="TestimonialsPage-grid">
               {this.rows.map((row) => (
-                <Card row={row} footer={<Controls row={row} onchange={changed} />} />
+                <Card row={row} footer={<Controls row={row} />} />
               ))}
             </div>
           ) : this.loading ? null : (

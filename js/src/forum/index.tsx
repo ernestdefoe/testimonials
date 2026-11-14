@@ -12,7 +12,7 @@ import TestimonialsWidget, { startTicker } from './widgets/Widget';
 import { hostedElsewhere } from './widgets/placement';
 import { registerHosts, registerPageBuilder } from './widgets/hosts';
 import { openShare, ui } from './share';
-import { t } from './util';
+import { t, tx } from './util';
 
 export { default as Testimonial } from './Testimonial';
 export { default as TestimonialsWidget } from './widgets/Widget';
@@ -98,10 +98,19 @@ app.initializers.add('ernestdefoe-testimonials', () => {
       const pending = Number(app.forum.attribute('testimonialsPending') || 0);
       items.add(
         'testimonialsQueue',
-        LinkButton.component({ href: app.route('testimonials.queue'), icon: 'fas fa-inbox' }, [
-          t('nav_queue'),
-          pending ? <span className="TestimonialsNav-count">{pending >= 100 ? '99+' : pending}</span> : null,
-        ]),
+        // The count rides on an attribute, drawn by CSS: core's SelectDropdown shows the active
+        // item's label a second time in its toggle, and a badge element in that label would be one
+        // vnode in two places. Then a change in the count (an approval) threw in the redraw and
+        // froze the page: the approved row stayed until a refresh.
+        LinkButton.component(
+          {
+            href: app.route('testimonials.queue'),
+            icon: 'fas fa-inbox',
+            className: 'TestimonialsNav-queue',
+            'data-count': pending ? (pending >= 100 ? '99+' : String(pending)) : undefined,
+          },
+          t('nav_queue')
+        ),
         72
       );
     }
@@ -174,7 +183,7 @@ function nudge(): Mithril.Children {
       <Button
         className="Button Button--icon Button--link TestimonialsNudge-close"
         icon="fas fa-xmark"
-        aria-label={app.translator.trans('core.lib.modal.close_button')}
+        aria-label={tx('nudge.close')}
         onclick={() => {
           try {
             localStorage.setItem(NUDGE_KEY, '1');

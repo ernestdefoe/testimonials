@@ -82,30 +82,44 @@ export default class QueuePage extends Page {
     this.load(0);
   }
 
-  /** Act on one, then drop it from this tab (it belongs to another now) and refresh the counts. */
+  /**
+   * Act on one. A row that belongs to another tab afterwards leaves this one at once (it doesn't
+   * wait for the answer, so nothing that runs after the answer can keep it on screen) and comes
+   * back where it was if the server says no; moderate() has already shown why.
+   */
   act(row: Testimonial, action: string, extra: Record<string, unknown> = {}): Promise<void> {
     const id = row.id()!;
-    this.busy.add(id);
+    const tab = this.tab;
+    const stays = (tab === 'approved' && action === 'feature') || (tab === 'featured' && (action === 'up' || action === 'down'));
+    const at = this.rows.indexOf(row);
+    if (this.declining === id) this.declining = null;
+    if (stays) this.busy.add(id);
+    else this.drop(row);
+
     return moderate(row, action, extra)
-      .then(() => {
-        const stays = (this.tab === 'approved' && action === 'feature') || (this.tab === 'featured' && (action === 'up' || action === 'down'));
-        if (!stays) {
-          this.rows = this.rows.filter((r) => r !== row);
-          this.selected.delete(id);
-          this.focus = Math.min(this.focus, Math.max(0, this.rows.length - 1));
+      .then(
+        () => {
+          if (tab === 'pending' && !stays) {
+            const pending = Math.max(0, Number(app.forum.attribute('testimonialsPending') || 0) - 1);
+            app.forum.pushAttributes({ testimonialsPending: pending });
+          }
+          if (this.tab === 'featured' && (action === 'up' || action === 'down')) this.load(0);
+        },
+        () => {
+          if (!stays && this.tab === tab && at >= 0 && !this.rows.includes(row)) this.rows.splice(Math.min(at, this.rows.length), 0, row);
         }
-        if (this.declining === id) this.declining = null;
-        if (this.tab === 'pending') {
-          const pending = Math.max(0, Number(app.forum.attribute('testimonialsPending') || 0) - 1);
-          (app.forum as any).pushAttributes({ testimonialsPending: pending });
-        }
-        if (this.tab === 'featured' && (action === 'up' || action === 'down')) this.load(0);
-      })
-      .catch(() => {})
+      )
       .finally(() => {
         this.busy.delete(id);
         m.redraw();
       });
+  }
+
+  private drop(row: Testimonial): void {
+    this.rows = this.rows.filter((r) => r !== row);
+    this.selected.delete(row.id()!);
+    this.focus = Math.min(this.focus, Math.max(0, this.rows.length - 1));
+    m.redraw();
   }
 
   bulk(action: 'approve' | 'decline'): void {
@@ -374,7 +388,7 @@ export default class QueuePage extends Page {
         />
         <div className="QueueRow-declineActions">
           <Button className="Button" onclick={() => (this.declining = null)}>
-            {app.translator.trans('core.lib.modal.cancel_button')}
+            {t('queue.cancel')}
           </Button>
           <Button
             className="Button Button--danger"
