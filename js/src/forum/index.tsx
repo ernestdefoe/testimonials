@@ -53,8 +53,16 @@ const page = (pick: (chunk: any) => any) => () => ui().then(async (chunk) => (aw
 const extenders = [
   new Extend.Store().add('testimonials', Testimonial),
   new Extend.Routes()
-    .add('testimonials', '/testimonials', page((chunk) => chunk.TestimonialsPage))
-    .add('testimonials.queue', '/testimonials/queue', page((chunk) => chunk.QueuePage))
+    .add(
+      'testimonials',
+      '/testimonials',
+      page((chunk) => chunk.TestimonialsPage)
+    )
+    .add(
+      'testimonials.queue',
+      '/testimonials/queue',
+      page((chunk) => chunk.QueuePage)
+    )
     .add('user.testimonials', '/u/:username/testimonials', () => ui().then(async (chunk) => ({ default: await chunk.userTestimonialsPage() }))),
   Object.keys(NOTIFICATIONS).reduce((ext, type) => ext.add(type, notificationComponent(type)), new Extend.Notification()),
 ];
