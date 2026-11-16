@@ -18,5 +18,5 @@ export function openShare(prefill: SharePrefill = {}): void {
     app.modal.show(() => import('flarum/forum/components/LogInModal'));
     return;
   }
-  ui().then(({ ShareModal }) => app.modal.show(ShareModal, prefill));
+  ui().then(({ ShareModal }) => app.modal.show(ShareModal, { ...prefill }));
 }

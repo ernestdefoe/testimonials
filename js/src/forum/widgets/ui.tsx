@@ -1,4 +1,5 @@
 import app from 'flarum/forum/app';
+import Component, { type ComponentAttrs } from 'flarum/common/Component';
 import Link from 'flarum/common/components/Link';
 import Icon from 'flarum/common/components/Icon';
 import stringToColor from 'flarum/common/utils/stringToColor';
@@ -122,17 +123,44 @@ function QuoteMarkView(_attrs: Record<string, never>): Mithril.Children {
   );
 }
 
-/** A plain function as a Mithril component (a bare function in JSX is a closure component factory). */
-function component<A>(view: (attrs: A) => Mithril.Children): Mithril.Component<A> {
-  return { view: (vnode) => view(vnode.attrs) };
+// Each view as a Flarum component, so JSX and the typings take it like any other.
+type AttrsOf<F extends (attrs: any) => Mithril.Children> = Parameters<F>[0] & ComponentAttrs;
+
+export class Stars extends Component<AttrsOf<typeof StarsView>> {
+  view() {
+    return StarsView(this.attrs);
+  }
 }
 
-export const Stars = component(StarsView);
-export const Avatar = component(AvatarView);
-export const Byline = component(BylineView);
-export const SubjectChip = component(SubjectChipView);
-export const Card = component(CardView);
-export const QuoteMark = component(QuoteMarkView);
+export class Avatar extends Component<AttrsOf<typeof AvatarView>> {
+  view() {
+    return AvatarView(this.attrs);
+  }
+}
+
+export class Byline extends Component<AttrsOf<typeof BylineView>> {
+  view() {
+    return BylineView(this.attrs);
+  }
+}
+
+export class SubjectChip extends Component<AttrsOf<typeof SubjectChipView>> {
+  view() {
+    return SubjectChipView(this.attrs);
+  }
+}
+
+export class Card extends Component<AttrsOf<typeof CardView>> {
+  view() {
+    return CardView(this.attrs);
+  }
+}
+
+export class QuoteMark extends Component {
+  view() {
+    return QuoteMarkView({});
+  }
+}
 
 /*
  * Narrow spots (sidebars, a third-width column, FoF's side sections) get the compact look,
