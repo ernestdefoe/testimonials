@@ -6,7 +6,6 @@ use Carbon\Carbon;
 use ErnestDefoe\Depot\Model\Review;
 use ErnestDefoe\Testimonials\Moderation;
 use ErnestDefoe\Testimonials\Testimonial;
-use Illuminate\Database\ConnectionInterface;
 
 /**
  * Depot reviews shown as testimonials. A review rated 4★ or more, with words in it, is mirrored
@@ -24,7 +23,6 @@ use Illuminate\Database\ConnectionInterface;
 class Mirror
 {
     public function __construct(
-        private readonly ConnectionInterface $db,
         private readonly Moderation $moderation,
     ) {
     }
@@ -96,7 +94,7 @@ class Mirror
         });
 
         Testimonial::query()->where('source', 'depot')
-            ->whereNotIn('source_id', $this->db->table('depot_reviews')->select('id'))
+            ->whereNotIn('source_id', Review::query()->withoutGlobalScopes()->select('id'))
             ->delete();
         $this->moderation->changed();
 

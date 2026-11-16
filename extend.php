@@ -46,6 +46,8 @@ $extenders = [
 
     new Extend\ApiResource(Api\TestimonialResource::class),
 
+    // Not CRUD, so not on the resource: a moderation action that answers with the resource, and a
+    // cached aggregate (counts and averages) that no single testimonial carries.
     (new Extend\Routes('api'))
         ->post('/testimonials/{id:\d+}/moderate', 'testimonials.moderate', Api\ModerateController::class)
         ->get('/testimonials-summary', 'testimonials.summary', Api\SummaryController::class),

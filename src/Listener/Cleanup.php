@@ -5,8 +5,8 @@ namespace ErnestDefoe\Testimonials\Listener;
 use ErnestDefoe\Testimonials\Moderation;
 use ErnestDefoe\Testimonials\Rating;
 use ErnestDefoe\Testimonials\Testimonial;
+use Flarum\Post\Post;
 use Flarum\User\Event\Deleting as UserDeleting;
-use Illuminate\Database\ConnectionInterface;
 
 /**
  * What happens to testimonials when what they point at goes away. The foreign keys cover the
@@ -15,7 +15,6 @@ use Illuminate\Database\ConnectionInterface;
 class Cleanup
 {
     public function __construct(
-        private readonly ConnectionInterface $db,
         private readonly Moderation $moderation,
     ) {
     }
@@ -73,7 +72,8 @@ class Cleanup
     public function posts(): void
     {
         $orphans = Testimonial::query()->where('subject_type', 'post')
-            ->whereNotIn('subject_id', $this->db->table('posts')->select('id'))
+            // Every post row, whatever its type (the model's scopes would hide unregistered types).
+            ->whereNotIn('subject_id', Post::query()->withoutGlobalScopes()->select('id'))
             ->update(['subject_type' => 'community', 'subject_id' => null]);
         if ($orphans) {
             $this->moderation->changed();

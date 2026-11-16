@@ -42,41 +42,7 @@ export default class Aspects extends Component<{ page: any }> {
       <div className="Form-group TestimonialsAspects">
         <label>{t('label')}</label>
         <p className="helpText">{t('help')}</p>
-        <ol className="TestimonialsAspects-list">
-          {list.map((aspect, i) => (
-            <li key={aspect.id}>
-              <input
-                className="FormControl"
-                value={aspect.name}
-                maxlength={60}
-                aria-label={app.translator.trans('ernestdefoe-testimonials.admin.aspects.name', { index: i + 1 }, true)}
-                oninput={(e: InputEvent) => {
-                  list[i] = { ...aspect, name: (e.target as HTMLInputElement).value };
-                  this.write(list);
-                }}
-              />
-              <Button
-                className="Button Button--icon"
-                icon="fas fa-arrow-up"
-                disabled={i === 0}
-                aria-label={app.translator.trans('ernestdefoe-testimonials.admin.aspects.up', {}, true)}
-                onclick={() => {
-                  [list[i - 1], list[i]] = [list[i], list[i - 1]];
-                  this.write(list);
-                }}
-              />
-              <Button
-                className="Button Button--icon"
-                icon="fas fa-trash-can"
-                aria-label={app.translator.trans('ernestdefoe-testimonials.admin.aspects.remove', {}, true)}
-                onclick={() => {
-                  list.splice(i, 1);
-                  this.write(list);
-                }}
-              />
-            </li>
-          ))}
-        </ol>
+        <ol className="TestimonialsAspects-list">{list.map((aspect, i) => this.row(list, aspect, i))}</ol>
         <Button
           className="Button"
           icon="fas fa-plus"
@@ -88,6 +54,45 @@ export default class Aspects extends Component<{ page: any }> {
           {t('add')}
         </Button>
       </div>
+    );
+  }
+
+  /** One aspect: its name, move it up, remove it. Every change writes the whole list back. */
+  row(list: Aspect[], aspect: Aspect, i: number) {
+    const label = (key: string, params: Record<string, unknown> = {}) =>
+      app.translator.trans(`ernestdefoe-testimonials.admin.aspects.${key}`, params, true);
+    return (
+      <li key={aspect.id}>
+        <input
+          className="FormControl"
+          value={aspect.name}
+          maxlength={60}
+          aria-label={label('name', { index: i + 1 })}
+          oninput={(e: InputEvent) => {
+            list[i] = { ...aspect, name: (e.target as HTMLInputElement).value };
+            this.write(list);
+          }}
+        />
+        <Button
+          className="Button Button--icon"
+          icon="fas fa-arrow-up"
+          disabled={i === 0}
+          aria-label={label('up')}
+          onclick={() => {
+            [list[i - 1], list[i]] = [list[i], list[i - 1]];
+            this.write(list);
+          }}
+        />
+        <Button
+          className="Button Button--icon"
+          icon="fas fa-trash-can"
+          aria-label={label('remove')}
+          onclick={() => {
+            list.splice(i, 1);
+            this.write(list);
+          }}
+        />
+      </li>
     );
   }
 }

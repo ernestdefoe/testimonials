@@ -187,7 +187,8 @@ class Moderation
         }
         try {
             $date = Carbon::parse((string) $value);
-        } catch (\Throwable) {
+        } catch (\InvalidArgumentException) {
+            // Not a date (Carbon's InvalidFormatException): tell the moderator, not a 500.
             throw new Refusal('until');
         }
         if ($date->isPast()) {

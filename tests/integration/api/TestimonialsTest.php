@@ -336,6 +336,27 @@ class TestimonialsTest extends TestCase
     }
 
     #[Test]
+    public function a_testimonial_about_a_deleted_post_stays_as_a_community_one(): void
+    {
+        $this->database()->table('discussions')->insert(['id' => 1, 'title' => 'Router help', 'slug' => 'router-help', 'created_at' => Carbon::now(), 'user_id' => 3, 'comment_count' => 2, 'last_post_number' => 2]);
+        $this->database()->table('posts')->insert([
+            ['id' => 1, 'discussion_id' => 1, 'number' => 1, 'created_at' => Carbon::now(), 'user_id' => 3, 'type' => 'comment', 'content' => '<t><p>Help</p></t>'],
+            ['id' => 2, 'discussion_id' => 1, 'number' => 2, 'created_at' => Carbon::now(), 'user_id' => 4, 'type' => 'comment', 'content' => '<t><p>Fixed</p></t>'],
+        ]);
+        $this->database()->table('discussions')->where('id', 1)->update(['first_post_id' => 1]);
+        $this->database()->table('testimonials')->where('id', 1)->update(['subject_type' => 'post', 'subject_id' => 2]);
+        $this->database()->table('testimonials')->where('id', 2)->update(['subject_type' => 'post', 'subject_id' => 1]);
+
+        [$status] = $this->call('DELETE', '/api/posts/2', 1);
+        $this->assertSame(204, $status);
+
+        $row = fn (int $id) => $this->database()->table('testimonials')->where('id', $id)->first();
+        $this->assertSame('community', $row(1)->subject_type);
+        $this->assertNull($row(1)->subject_id);
+        $this->assertSame('post', $row(2)->subject_type, 'a testimonial about a post that is still there keeps it');
+    }
+
+    #[Test]
     public function the_nudge_stops_once_a_member_has_written_one(): void
     {
         $this->setting('ernestdefoe-testimonials.nudge', '1');

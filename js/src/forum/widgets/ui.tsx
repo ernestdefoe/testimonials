@@ -6,6 +6,7 @@ import stringToColor from 'flarum/common/utils/stringToColor';
 import classList from 'flarum/common/utils/classList';
 import type Mithril from 'mithril';
 import type Testimonial from '../Testimonial';
+import type { Summary } from './data';
 import { t } from '../util';
 
 /*
@@ -159,6 +160,64 @@ export class Card extends Component<AttrsOf<typeof CardView>> {
 export class QuoteMark extends Component {
   view() {
     return QuoteMarkView({});
+  }
+}
+
+/* The rating summary's pieces, on the rating widget and the testimonials page. */
+
+export class RatingScore extends Component<{ summary: Summary }> {
+  view() {
+    const data = this.attrs.summary;
+    return (
+      <div className="TestimonialsRating-score">
+        <span className="TestimonialsRating-average">{(data.average || 0).toFixed(1)}</span>
+        <span className="TestimonialsRating-of">
+          <Stars value={data.average} size="md" />
+          <span>{t('widget.count', { count: data.count })}</span>
+        </span>
+      </div>
+    );
+  }
+}
+
+/** The 5→1 spread, each bar against the most common rating. */
+export class RatingBars extends Component<{ summary: Summary }> {
+  view() {
+    const data = this.attrs.summary;
+    const max = Math.max(1, ...Object.values(data.spread));
+    return (
+      <div className="TestimonialsRating-bars">
+        {[5, 4, 3, 2, 1].map((n) => (
+          <div className="TestimonialsRating-bar">
+            <span>{n}</span>
+            <span className="TestimonialsRating-track">
+              <span style={{ width: `${Math.round(((data.spread[n] || 0) / max) * 100)}%` }} />
+            </span>
+            <span>{data.spread[n] || 0}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+}
+
+export class RatingAspects extends Component<{ summary: Summary }> {
+  view() {
+    return (
+      <dl className="TestimonialsRating-aspects">
+        {this.attrs.summary.aspects.map((a) => (
+          <div className="TestimonialsRating-aspect">
+            <dt>{a.name}</dt>
+            <dd>
+              <span className="TestimonialsRating-track">
+                <span style={{ width: `${(a.average / 5) * 100}%` }} />
+              </span>
+              <span>{a.average.toFixed(1)}</span>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    );
   }
 }
 

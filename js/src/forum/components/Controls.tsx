@@ -154,64 +154,72 @@ export default class Controls extends Component<Attrs> {
     m.redraw();
   }
 
-  items(): Mithril.Children[] {
-    const row = this.attrs.row;
-    // moderate() shows the error and refreshes everything on success.
-    const act =
-      (action: string, extra: Record<string, unknown> = {}) =>
-      () =>
-        moderate(row, action, extra).catch(() => {});
-    const items: Mithril.Children[] = [];
-    const item = (icon: string, label: Mithril.Children, fn: () => unknown) => (
+  /** One menu item: runs on its own click, then the menu closes. */
+  item(icon: string, label: Mithril.Children, fn: () => unknown): Mithril.Children {
+    return (
       <li role="none">
         <Button className="TestimonialControls-item" role="menuitem" icon={icon} onclick={() => this.run(fn)}>
           {label}
         </Button>
       </li>
     );
+  }
 
-    if (row.canModerate() && row.status() === 'approved') {
-      items.push(
-        row.isFeatured() ? item('far fa-star', t('controls.unfeature'), act('unfeature')) : item('fas fa-star', t('controls.feature'), act('feature'))
-      );
-      if (row.isFeatured()) {
-        items.push(item('fas fa-arrow-up', t('controls.move_up'), act('up')), item('fas fa-arrow-down', t('controls.move_down'), act('down')));
-      }
-    }
+  /** moderate() shows the error and refreshes everything on success. */
+  act(action: string, extra: Record<string, unknown> = {}): () => unknown {
+    return () => moderate(this.attrs.row, action, extra).catch(() => {});
+  }
+
+  items(): Mithril.Children[] {
+    const row = this.attrs.row;
+    const items: Mithril.Children[] = [...this.moderatorItems()];
     if (row.canEdit() || row.canEditWording()) {
-      items.push(item('fas fa-pen', row.canEdit() ? t('controls.edit') : t('controls.edit_wording'), () => openShare({ testimonial: row })));
+      items.push(this.item('fas fa-pen', row.canEdit() ? t('controls.edit') : t('controls.edit_wording'), () => openShare({ testimonial: row })));
     }
-    if (row.canHide()) {
-      items.push(
-        item(
-          row.hiddenByAuthor() ? 'fas fa-eye' : 'fas fa-eye-slash',
-          row.hiddenByAuthor() ? t('controls.show_depot') : t('controls.hide_depot'),
-          () =>
-            (row as any)
-              .save({ hiddenByAuthor: !row.hiddenByAuthor() }, { errorHandler: alertError })
-              .then(() => changed())
-              .catch(() => {})
-              .finally(() => m.redraw())
-        )
-      );
-    }
+    if (row.canHide()) items.push(this.hideItem());
     if (row.canModerate() && row.status() !== 'declined' && row.status() !== 'removed') {
       items.push(
-        item('fas fa-xmark', t('controls.decline'), () => {
+        this.item('fas fa-xmark', t('controls.decline'), () => {
           const reason = window.prompt(tx('controls.decline_prompt'));
-          if (reason !== null) act('decline', { reason })();
+          if (reason !== null) this.act('decline', { reason })();
         })
       );
     }
     if (row.canRemove()) {
       items.push(
-        item('fas fa-trash-can', t('controls.remove'), () => {
-          if (window.confirm(tx('controls.remove_confirm'))) act('remove')();
+        this.item('fas fa-trash-can', t('controls.remove'), () => {
+          if (window.confirm(tx('controls.remove_confirm'))) this.act('remove')();
         })
       );
     }
-    if (row.canRestore()) items.push(item('fas fa-rotate-left', t('controls.restore'), act('restore')));
+    if (row.canRestore()) items.push(this.item('fas fa-rotate-left', t('controls.restore'), this.act('restore')));
     return items;
+  }
+
+  /** Feature or stop, and (featured) its place in the strip. */
+  moderatorItems(): Mithril.Children[] {
+    const row = this.attrs.row;
+    if (!row.canModerate() || row.status() !== 'approved') return [];
+    if (!row.isFeatured()) return [this.item('fas fa-star', t('controls.feature'), this.act('feature'))];
+    return [
+      this.item('far fa-star', t('controls.unfeature'), this.act('unfeature')),
+      this.item('fas fa-arrow-up', t('controls.move_up'), this.act('up')),
+      this.item('fas fa-arrow-down', t('controls.move_down'), this.act('down')),
+    ];
+  }
+
+  /** The author takes their Depot review out of the widgets, or puts it back. */
+  hideItem(): Mithril.Children {
+    const row = this.attrs.row;
+    const hidden = row.hiddenByAuthor();
+    return this.item(hidden ? 'fas fa-eye' : 'fas fa-eye-slash', hidden ? t('controls.show_depot') : t('controls.hide_depot'), () =>
+      (row as any)
+        .save({ hiddenByAuthor: !hidden }, { errorHandler: alertError })
+        .then(() => changed())
+        // alertError already told them; the card keeps its state.
+        .catch(() => {})
+        .finally(() => m.redraw())
+    );
   }
 
   view() {

@@ -72,70 +72,16 @@ export default class ShareModal extends FormModal<ShareModalAttrs> {
   }
 
   content() {
-    const min = Number(app.forum.attribute('testimonialsMinLength') || 40);
-    const max = Number(app.forum.attribute('testimonialsMaxLength') || 600);
-    const length = this.body.trim().length;
-
     return (
       <div className="ShareTestimonial">
         <div className="Modal-body ShareTestimonial-form">
-          {this.wordingOnly ? (
-            <p className="ShareTestimonial-note">{t('share.wording_note')}</p>
-          ) : (
-            <p className="ShareTestimonial-note">{t('share.intro')}</p>
-          )}
+          <p className="ShareTestimonial-note">{this.wordingOnly ? t('share.wording_note') : t('share.intro')}</p>
           {!this.editing ? this.subjectField() : null}
           {!this.wordingOnly && app.forum.attribute('testimonialsRatings') !== false ? this.ratingFields() : null}
-
-          <div className="Form-group">
-            <label htmlFor="testimonial-headline">
-              {t('share.headline')} <span className="ShareTestimonial-optional">{t('share.optional')}</span>
-            </label>
-            <input
-              id="testimonial-headline"
-              className="FormControl"
-              maxlength={120}
-              value={this.headline}
-              placeholder={tx('share.headline_placeholder')}
-              oninput={(e: InputEvent) => (this.headline = (e.target as HTMLInputElement).value)}
-            />
-          </div>
-
-          <div className="Form-group">
-            <label htmlFor="testimonial-body">{t('share.body')}</label>
-            <textarea
-              id="testimonial-body"
-              className="FormControl ShareTestimonial-body"
-              rows={5}
-              maxlength={max}
-              value={this.body}
-              placeholder={tx('share.body_placeholder')}
-              oninput={(e: InputEvent) => (this.body = (e.target as HTMLTextAreaElement).value)}
-            />
-            <p className="helpText ShareTestimonial-count">
-              <span>{t('share.body_help', { min })}</span>
-              <span className={classList(length > 0 && length < min && 'is-short')}>{t('share.counter', { count: length, max })}</span>
-            </p>
-          </div>
-
+          {this.headlineField()}
+          {this.bodyField()}
           {!this.wordingOnly ? this.bylineField() : null}
-
-          {!this.editing ? (
-            <div className="Form-group ShareTestimonial-consent">
-              <label className="checkbox">
-                <input type="checkbox" checked={this.consent} onchange={(e: Event) => (this.consent = (e.target as HTMLInputElement).checked)} />
-                {t('share.consent')}
-              </label>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={this.consentExternal}
-                  onchange={(e: Event) => (this.consentExternal = (e.target as HTMLInputElement).checked)}
-                />
-                {t('share.consent_external')}
-              </label>
-            </div>
-          ) : null}
+          {!this.editing ? this.consentFields() : null}
 
           <div className="Form-group ShareTestimonial-actions">
             <p className="helpText">{this.wordingOnly ? t('share.wording_footer') : t('share.footer')}</p>
@@ -152,8 +98,70 @@ export default class ShareModal extends FormModal<ShareModalAttrs> {
     );
   }
 
+  headlineField(): Mithril.Children {
+    return (
+      <div className="Form-group">
+        <label htmlFor="testimonial-headline">
+          {t('share.headline')} <span className="ShareTestimonial-optional">{t('share.optional')}</span>
+        </label>
+        <input
+          id="testimonial-headline"
+          className="FormControl"
+          maxlength={120}
+          value={this.headline}
+          placeholder={tx('share.headline_placeholder')}
+          oninput={(e: InputEvent) => (this.headline = (e.target as HTMLInputElement).value)}
+        />
+      </div>
+    );
+  }
+
+  bodyField(): Mithril.Children {
+    const min = Number(app.forum.attribute('testimonialsMinLength') || 40);
+    const max = Number(app.forum.attribute('testimonialsMaxLength') || 600);
+    const length = this.body.trim().length;
+    return (
+      <div className="Form-group">
+        <label htmlFor="testimonial-body">{t('share.body')}</label>
+        <textarea
+          id="testimonial-body"
+          className="FormControl ShareTestimonial-body"
+          rows={5}
+          maxlength={max}
+          value={this.body}
+          placeholder={tx('share.body_placeholder')}
+          oninput={(e: InputEvent) => (this.body = (e.target as HTMLTextAreaElement).value)}
+        />
+        <p className="helpText ShareTestimonial-count">
+          <span>{t('share.body_help', { min })}</span>
+          <span className={classList(length > 0 && length < min && 'is-short')}>{t('share.counter', { count: length, max })}</span>
+        </p>
+      </div>
+    );
+  }
+
+  consentFields(): Mithril.Children {
+    return (
+      <div className="Form-group ShareTestimonial-consent">
+        <label className="checkbox">
+          <input type="checkbox" checked={this.consent} onchange={(e: Event) => (this.consent = (e.target as HTMLInputElement).checked)} />
+          {t('share.consent')}
+        </label>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={this.consentExternal}
+            onchange={(e: Event) => (this.consentExternal = (e.target as HTMLInputElement).checked)}
+          />
+          {t('share.consent_external')}
+        </label>
+      </div>
+    );
+  }
+
+  /** What it's about: the community, a tag, a download, or (from a post's menu) that post. */
   subjectField(): Mithril.Children {
-    const tags = 'flarum-tags' in ((globalThis as any).flarum?.extensions || {}) ? app.store.all<any>('tags') : [];
+    const tags = 'flarum-tags' in (flarum.extensions || {}) ? app.store.all<any>('tags') : [];
     const choices: Array<[SubjectType, string]> = [['community', tx('share.about_community')]];
     if (tags.length) choices.push(['tag', tx('share.about_tag')]);
     if (app.forum.attribute('testimonialsDepot')) choices.push(['depot', tx('share.about_depot')]);
@@ -169,38 +177,14 @@ export default class ShareModal extends FormModal<ShareModalAttrs> {
                 type="button"
                 className={classList('ShareTestimonial-segment', this.subjectType === type && 'is-on')}
                 aria-pressed={this.subjectType === type ? 'true' : 'false'}
-                onclick={() => {
-                  if (this.subjectType === type) return;
-                  this.subjectType = type;
-                  this.subjectId = null;
-                  this.subjectLabel = '';
-                }}
+                onclick={() => this.pickSubject(type)}
               >
                 {label}
               </button>
             ))}
           </div>
         ) : null}
-        {this.subjectType === 'tag' ? (
-          <select
-            className="FormControl"
-            aria-label={tx('share.about_tag')}
-            value={this.subjectId ? String(this.subjectId) : ''}
-            onchange={(e: Event) => {
-              const id = Number((e.target as HTMLSelectElement).value) || null;
-              this.subjectId = id;
-              this.subjectLabel = id ? app.store.getById<any>('tags', String(id))?.name() || '' : '';
-            }}
-          >
-            <option value="">{tx('share.pick_tag')}</option>
-            {tags
-              .filter((tag: any) => !tag.isHidden?.())
-              .map((tag: any) => (
-                // Keyed as strings: integer-like keys get re-sorted by JS.
-                <option value={String(tag.id())}>{tag.name()}</option>
-              ))}
-          </select>
-        ) : null}
+        {this.subjectType === 'tag' ? this.tagPicker(tags) : null}
         {this.subjectType === 'depot' ? this.depotPicker() : null}
         {this.subjectType === 'post' ? (
           <p className="ShareTestimonial-linked">
@@ -208,6 +192,36 @@ export default class ShareModal extends FormModal<ShareModalAttrs> {
           </p>
         ) : null}
       </fieldset>
+    );
+  }
+
+  pickSubject(type: SubjectType): void {
+    if (this.subjectType === type) return;
+    this.subjectType = type;
+    this.subjectId = null;
+    this.subjectLabel = '';
+  }
+
+  tagPicker(tags: any[]): Mithril.Children {
+    return (
+      <select
+        className="FormControl"
+        aria-label={tx('share.about_tag')}
+        value={this.subjectId ? String(this.subjectId) : ''}
+        onchange={(e: Event) => {
+          const id = Number((e.target as HTMLSelectElement).value) || null;
+          this.subjectId = id;
+          this.subjectLabel = id ? app.store.getById<any>('tags', String(id))?.name() || '' : '';
+        }}
+      >
+        <option value="">{tx('share.pick_tag')}</option>
+        {tags
+          .filter((tag: any) => !tag.isHidden?.())
+          .map((tag: any) => (
+            // Keyed as strings: integer-like keys get re-sorted by JS.
+            <option value={String(tag.id())}>{tag.name()}</option>
+          ))}
+      </select>
     );
   }
 

@@ -1,5 +1,4 @@
 /** Core components the pages build on, loaded through the registry: some live in lazy chunks. */
-declare const flarum: any;
 
 export let PageStructure: any;
 export let IndexSidebar: any;

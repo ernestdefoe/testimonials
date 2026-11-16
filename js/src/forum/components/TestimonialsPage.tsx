@@ -6,7 +6,7 @@ import LoadingIndicator from 'flarum/common/components/LoadingIndicator';
 import classList from 'flarum/common/utils/classList';
 import type Mithril from 'mithril';
 import type Testimonial from '../Testimonial';
-import { Card, Stars } from '../widgets/ui';
+import { Card, RatingAspects, RatingBars, RatingScore } from '../widgets/ui';
 import type { Summary } from '../widgets/data';
 import { api, onChange, t, tx } from '../util';
 import { openShare } from '../share';
@@ -50,6 +50,8 @@ export default class TestimonialsPage extends Page {
 
   reload(): void {
     app
+      // The score and chips are extras: without them the page still lists everything, so a failure
+      // here stays quiet rather than putting an error over a working page.
       .request<Summary>({ method: 'GET', url: api('testimonials-summary'), params: { subjects: 1 }, errorHandler: () => {} } as any)
       .then((s) => (this.summary = s))
       .catch(() => {})
@@ -57,6 +59,7 @@ export default class TestimonialsPage extends Page {
     app.store
       .find<Testimonial[]>('testimonials', { filter: { featured: 1 }, page: { limit: 3 } })
       .then((rows) => (this.featured = [...(rows as any)]))
+      // Flarum's request handler has already shown the error; the page lists the rest.
       .catch(() => {})
       .finally(() => m.redraw());
     this.load(0);
@@ -143,7 +146,6 @@ export default class TestimonialsPage extends Page {
   hero(): Mithril.Children {
     const s = this.summary;
     const ratings = app.forum.attribute('testimonialsRatings') !== false && s && s.average !== null;
-    const max = s ? Math.max(1, ...Object.values(s.spread)) : 1;
     return (
       <header className="TestimonialsPage-hero">
         <div className="TestimonialsPage-intro">
@@ -165,39 +167,9 @@ export default class TestimonialsPage extends Page {
         </div>
         {ratings ? (
           <div className="TestimonialsPage-score">
-            <div className="TestimonialsRating-score">
-              <span className="TestimonialsRating-average">{s!.average!.toFixed(1)}</span>
-              <span className="TestimonialsRating-of">
-                <Stars value={s!.average} size="md" />
-                <span>{t('widget.count', { count: s!.count })}</span>
-              </span>
-            </div>
-            <div className="TestimonialsRating-bars">
-              {[5, 4, 3, 2, 1].map((n) => (
-                <div className="TestimonialsRating-bar">
-                  <span>{n}</span>
-                  <span className="TestimonialsRating-track">
-                    <span style={{ width: `${Math.round(((s!.spread[n] || 0) / max) * 100)}%` }} />
-                  </span>
-                  <span>{s!.spread[n] || 0}</span>
-                </div>
-              ))}
-            </div>
-            {s!.aspects.length ? (
-              <dl className="TestimonialsRating-aspects">
-                {s!.aspects.map((a) => (
-                  <div className="TestimonialsRating-aspect">
-                    <dt>{a.name}</dt>
-                    <dd>
-                      <span className="TestimonialsRating-track">
-                        <span style={{ width: `${(a.average / 5) * 100}%` }} />
-                      </span>
-                      <span>{a.average.toFixed(1)}</span>
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            ) : null}
+            <RatingScore summary={s!} />
+            <RatingBars summary={s!} />
+            {s!.aspects.length ? <RatingAspects summary={s!} /> : null}
           </div>
         ) : null}
       </header>

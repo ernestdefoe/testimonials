@@ -9,7 +9,7 @@ import type Testimonial from '../Testimonial';
 import { list, summary } from './data';
 import { filtersFor, normalize, summaryParams, type WidgetSettings } from './settings';
 import { claim, release } from './placement';
-import { Avatar, Byline, Card, QuoteMark, Stars, unwatchWidth, watchWidth } from './ui';
+import { Avatar, Byline, Card, QuoteMark, RatingAspects, RatingBars, RatingScore, Stars, unwatchWidth, watchWidth } from './ui';
 import { dayIndex, t, tx } from '../util';
 import { openShare } from '../share';
 
@@ -92,22 +92,7 @@ function carousel(s: WidgetSettings, bare: boolean): Mithril.Children | null {
             {s.title || t('widget.carousel_title')}
           </span>
         )}
-        {rows.length > 1 ? (
-          <span className="TestimonialsCarousel-arrows">
-            <Button
-              className="Button Button--icon TestimonialsCarousel-prev"
-              icon="fas fa-chevron-left"
-              aria-label={tx('widget.previous')}
-              onclick={step(-1)}
-            />
-            <Button
-              className="Button Button--icon TestimonialsCarousel-next"
-              icon="fas fa-chevron-right"
-              aria-label={tx('widget.next')}
-              onclick={step(1)}
-            />
-          </span>
-        ) : null}
+        {rows.length > 1 ? carouselArrows() : null}
       </div>
       <div className="TestimonialsCarousel-track" onscroll={syncDots} tabindex="0">
         {rows.map((row, i) => (
@@ -121,25 +106,46 @@ function carousel(s: WidgetSettings, bare: boolean): Mithril.Children | null {
         ))}
       </div>
       <div className="TestimonialsCarousel-foot">
-        {rows.length > 1 ? (
-          <span className="TestimonialsCarousel-dots">
-            {rows.map((_, i) => (
-              <button
-                type="button"
-                className={classList('TestimonialsCarousel-dot', i === 0 && 'is-on')}
-                aria-label={tx('widget.go_to', { index: i + 1 })}
-                onclick={goTo(i)}
-              >
-                <span />
-              </button>
-            ))}
-          </span>
-        ) : (
-          <span />
-        )}
+        {rows.length > 1 ? carouselDots(rows.length) : <span />}
         {seeAll()}
       </div>
     </section>
+  );
+}
+
+function carouselArrows(): Mithril.Children {
+  return (
+    <span className="TestimonialsCarousel-arrows">
+      <Button
+        className="Button Button--icon TestimonialsCarousel-prev"
+        icon="fas fa-chevron-left"
+        aria-label={tx('widget.previous')}
+        onclick={step(-1)}
+      />
+      <Button
+        className="Button Button--icon TestimonialsCarousel-next"
+        icon="fas fa-chevron-right"
+        aria-label={tx('widget.next')}
+        onclick={step(1)}
+      />
+    </span>
+  );
+}
+
+function carouselDots(count: number): Mithril.Children {
+  return (
+    <span className="TestimonialsCarousel-dots">
+      {Array.from({ length: count }, (_, i) => (
+        <button
+          type="button"
+          className={classList('TestimonialsCarousel-dot', i === 0 && 'is-on')}
+          aria-label={tx('widget.go_to', { index: i + 1 })}
+          onclick={goTo(i)}
+        >
+          <span />
+        </button>
+      ))}
+    </span>
   );
 }
 
@@ -208,66 +214,33 @@ function rating(s: WidgetSettings, bare: boolean): Mithril.Children | null {
   if (!data || !data.count) return null;
   const quotes = s.showQuote ? list({ ...filtersFor({ ...s, source: s.source === 'all' ? 'featured' : s.source }), sort: 'featured' }, 1) : null;
   const quote = quotes?.[0];
-  const max = Math.max(1, ...Object.values(data.spread));
   const ratings = app.forum.attribute('testimonialsRatings') !== false && data.average !== null;
 
   return (
     <section className="TestimonialsRating" aria-label={tx('widget.rating_label')}>
       {bare ? null : <h2 className="TestimonialsWidget-eyebrow">{s.title || t('widget.rating_title')}</h2>}
-      {ratings ? (
-        <div className="TestimonialsRating-score">
-          <span className="TestimonialsRating-average">{data.average!.toFixed(1)}</span>
-          <span className="TestimonialsRating-of">
-            <Stars value={data.average} size="md" />
-            <span>{t('widget.count', { count: data.count })}</span>
-          </span>
-        </div>
-      ) : (
-        <p className="TestimonialsRating-count">{t('widget.count', { count: data.count })}</p>
-      )}
-      {ratings ? (
-        <div className="TestimonialsRating-bars">
-          {[5, 4, 3, 2, 1].map((n) => (
-            <div className="TestimonialsRating-bar">
-              <span>{n}</span>
-              <span className="TestimonialsRating-track">
-                <span style={{ width: `${Math.round(((data.spread[n] || 0) / max) * 100)}%` }} />
-              </span>
-              <span>{data.spread[n] || 0}</span>
-            </div>
-          ))}
-        </div>
-      ) : null}
-      {ratings && data.aspects.length ? (
-        <dl className="TestimonialsRating-aspects">
-          {data.aspects.map((a) => (
-            <div className="TestimonialsRating-aspect">
-              <dt>{a.name}</dt>
-              <dd>
-                <span className="TestimonialsRating-track">
-                  <span style={{ width: `${(a.average / 5) * 100}%` }} />
-                </span>
-                <span>{a.average.toFixed(1)}</span>
-              </dd>
-            </div>
-          ))}
-        </dl>
-      ) : null}
-      {quote ? (
-        <figure className="TestimonialsRating-quote">
-          <blockquote>“{quote.body()}”</blockquote>
-          <figcaption>
-            {quote.author().anonymous ? t('byline.anonymous') : quote.author().name}
-            {quote.subject().label ? ` · ${quote.subject().label}` : ''}
-          </figcaption>
-        </figure>
-      ) : null}
+      {ratings ? <RatingScore summary={data} /> : <p className="TestimonialsRating-count">{t('widget.count', { count: data.count })}</p>}
+      {ratings ? <RatingBars summary={data} /> : null}
+      {ratings && data.aspects.length ? <RatingAspects summary={data} /> : null}
+      {quote ? ratingQuote(quote) : null}
       {s.showButton && (app.forum.attribute('testimonialsCanCreate') || !app.session.user) ? (
         <Button className="Button Button--block TestimonialsRating-share" onclick={() => openShare()}>
           {t('share.button')}
         </Button>
       ) : null}
     </section>
+  );
+}
+
+function ratingQuote(quote: Testimonial): Mithril.Children {
+  return (
+    <figure className="TestimonialsRating-quote">
+      <blockquote>“{quote.body()}”</blockquote>
+      <figcaption>
+        {quote.author().anonymous ? t('byline.anonymous') : quote.author().name}
+        {quote.subject().label ? ` · ${quote.subject().label}` : ''}
+      </figcaption>
+    </figure>
   );
 }
 

@@ -65,6 +65,7 @@ export default class QueuePage extends Page {
         this.rows = offset ? [...this.rows, ...rows] : [...rows];
         this.more = !!rows.payload?.links?.next;
       })
+      // Flarum's request handler has already shown the error; the queue keeps what it had.
       .catch(() => {})
       .finally(() => {
         this.loading = false;
@@ -155,8 +156,6 @@ export default class QueuePage extends Page {
 
   view() {
     if (!app.forum.attribute('testimonialsCanModerate')) return <div />;
-    const pending = Number(app.forum.attribute('testimonialsPending') || 0);
-    const allSelected = this.rows.length > 0 && this.rows.every((r) => this.selected.has(r.id()!));
 
     return (
       <PageStructure className="TestimonialsQueue" sidebar={() => <IndexSidebar />}>
@@ -164,48 +163,8 @@ export default class QueuePage extends Page {
           <h1 className="TestimonialsPage-title">{t('queue.title')}</h1>
           <p className="TestimonialsPage-lead">{t('queue.lead')}</p>
         </header>
-
-        <nav className="TestimonialsQueue-tabs" role="tablist">
-          {TABS.map((tab) => (
-            <button
-              type="button"
-              role="tab"
-              aria-selected={this.tab === tab ? 'true' : 'false'}
-              className={classList('TestimonialsQueue-tab', this.tab === tab && 'is-on')}
-              onclick={() => this.switchTab(tab)}
-            >
-              {t(`queue.tabs.${tab}`)}
-              {tab === 'pending' && pending ? <span className="TestimonialsNav-count">{pending}</span> : null}
-            </button>
-          ))}
-        </nav>
-
-        {this.tab === 'pending' && this.rows.length ? (
-          <div className="TestimonialsQueue-toolbar">
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onchange={(e: Event) => {
-                  this.selected = new Set((e.target as HTMLInputElement).checked ? this.rows.map((r) => r.id()!) : []);
-                }}
-              />
-              {t('queue.select_all')}
-            </label>
-            <Button className="Button" disabled={!this.selected.size} onclick={() => this.bulk('approve')}>
-              {t('queue.approve_selected', { count: this.selected.size })}
-            </Button>
-            <Button className="Button" disabled={!this.selected.size} onclick={() => this.bulk('decline')}>
-              {t('queue.decline_selected', { count: this.selected.size })}
-            </Button>
-            <span className="TestimonialsQueue-keys">
-              <kbd>J</kbd>
-              <kbd>K</kbd> {t('queue.keys_move')} <kbd>A</kbd> {t('queue.keys_approve')} <kbd>F</kbd> {t('queue.keys_feature')} <kbd>D</kbd>{' '}
-              {t('queue.keys_decline')}
-            </span>
-          </div>
-        ) : null}
-
+        {this.tabs()}
+        {this.tab === 'pending' && this.rows.length ? this.toolbar() : null}
         <div className="TestimonialsQueue-list">
           {this.rows.map((row, i) => this.row(row, i))}
           {!this.loading && !this.rows.length ? <p className="TestimonialsPage-empty">{t(`queue.empty.${this.tab}`)}</p> : null}
@@ -222,17 +181,59 @@ export default class QueuePage extends Page {
     );
   }
 
+  tabs(): Mithril.Children {
+    const pending = Number(app.forum.attribute('testimonialsPending') || 0);
+    return (
+      <nav className="TestimonialsQueue-tabs" role="tablist">
+        {TABS.map((tab) => (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={this.tab === tab ? 'true' : 'false'}
+            className={classList('TestimonialsQueue-tab', this.tab === tab && 'is-on')}
+            onclick={() => this.switchTab(tab)}
+          >
+            {t(`queue.tabs.${tab}`)}
+            {tab === 'pending' && pending > 0 ? <span className="TestimonialsNav-count">{pending}</span> : null}
+          </button>
+        ))}
+      </nav>
+    );
+  }
+
+  /** Select all, the bulk buttons and the keyboard hint (pending tab only). */
+  toolbar(): Mithril.Children {
+    const allSelected = this.rows.length > 0 && this.rows.every((r) => this.selected.has(r.id()!));
+    return (
+      <div className="TestimonialsQueue-toolbar">
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={allSelected}
+            onchange={(e: Event) => {
+              this.selected = new Set((e.target as HTMLInputElement).checked ? this.rows.map((r) => r.id()!) : []);
+            }}
+          />
+          {t('queue.select_all')}
+        </label>
+        <Button className="Button" disabled={!this.selected.size} onclick={() => this.bulk('approve')}>
+          {t('queue.approve_selected', { count: this.selected.size })}
+        </Button>
+        <Button className="Button" disabled={!this.selected.size} onclick={() => this.bulk('decline')}>
+          {t('queue.decline_selected', { count: this.selected.size })}
+        </Button>
+        <span className="TestimonialsQueue-keys">
+          <kbd>J</kbd>
+          <kbd>K</kbd> {t('queue.keys_move')} <kbd>A</kbd> {t('queue.keys_approve')} <kbd>F</kbd> {t('queue.keys_feature')} <kbd>D</kbd>{' '}
+          {t('queue.keys_decline')}
+        </span>
+      </div>
+    );
+  }
+
   row(row: Testimonial, index: number): Mithril.Children {
     const id = row.id()!;
-    const author = row.author();
     const busy = this.busy.has(id);
-    const meta = [
-      author.commentCount !== undefined ? t('queue.posts', { count: author.commentCount }) : null,
-      author.joinedAt
-        ? t('queue.joined', { date: new Date(author.joinedAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) })
-        : null,
-      author.trustLevel !== null && author.trustLevel !== undefined ? t('queue.trust_level', { level: author.trustLevel }) : null,
-    ].filter(Boolean);
 
     return (
       <article
@@ -240,49 +241,13 @@ export default class QueuePage extends Page {
         onclick={() => (this.focus = index)}
       >
         <div className="QueueRow-main">
-          {this.tab === 'pending' ? (
-            <input
-              type="checkbox"
-              className="QueueRow-check"
-              aria-label={tx('queue.select', { name: author.name || '' })}
-              checked={this.selected.has(id)}
-              onchange={(e: Event) => {
-                if ((e.target as HTMLInputElement).checked) this.selected.add(id);
-                else this.selected.delete(id);
-              }}
-            />
-          ) : null}
+          {this.tab === 'pending' ? this.checkbox(row) : null}
           <div className="QueueRow-content">
-            <div className="QueueRow-who">
-              <Avatar row={row} size={38} />
-              <div>
-                <strong>{author.name}</strong> <span className="QueueRow-when">· {humanTime(row.createdAt()!)}</span>
-                <div className="QueueRow-meta">{meta.map((part, i) => [i ? ' · ' : '', part])}</div>
-              </div>
-            </div>
-            <div className="QueueRow-tags">
-              <Stars value={row.rating()} />
-              <SubjectChip row={row} />
-              <span className="TestimonialChip">{t(`queue.shows.${row.byline()}`)}</span>
-              {row.source() === 'depot' ? <span className="TestimonialChip">{t('queue.from_depot')}</span> : null}
-              {row.editedByStaffAt() ? <span className="TestimonialChip is-warn">{t('queue.edited_by_staff')}</span> : null}
-            </div>
+            {this.who(row)}
+            {this.chips(row)}
             {row.headline() ? <h3 className="TestimonialCard-headline">{row.headline()}</h3> : null}
             <p className="TestimonialCard-body">{row.body()}</p>
-            {(row.aspects() || []).length ? (
-              <ul className="QueueRow-aspects">
-                {row.aspects().map((a) => {
-                  const name = (app.forum.attribute<Array<{ id: number; name: string }>>('testimonialsAspects') || []).find(
-                    (x) => x.id === a.id
-                  )?.name;
-                  return name ? (
-                    <li>
-                      {name} <Stars value={a.rating} />
-                    </li>
-                  ) : null;
-                })}
-              </ul>
-            ) : null}
+            {this.aspects(row)}
             <p className="QueueRow-consent">
               {t('queue.consent_forum')} · {row.consentExternal() ? t('queue.consent_external_yes') : t('queue.consent_external_no')}
             </p>
@@ -295,73 +260,151 @@ export default class QueuePage extends Page {
     );
   }
 
-  actions(row: Testimonial): Mithril.Children {
+  checkbox(row: Testimonial): Mithril.Children {
     const id = row.id()!;
-    const status = row.status();
-    const done = () => changed();
-    const edit = row.canEditWording() ? (
-      <Button className="Button" onclick={() => openShare({ testimonial: row })}>
-        {t('queue.edit')}
-      </Button>
-    ) : null;
+    return (
+      <input
+        type="checkbox"
+        className="QueueRow-check"
+        aria-label={tx('queue.select', { name: row.author().name || '' })}
+        checked={this.selected.has(id)}
+        onchange={(e: Event) => {
+          if ((e.target as HTMLInputElement).checked) this.selected.add(id);
+          else this.selected.delete(id);
+        }}
+      />
+    );
+  }
 
-    if (status === 'pending' || status === 'declined' || status === 'spam') {
-      return [
-        <Button className="Button Button--primary" onclick={() => this.act(row, 'approve').then(done)}>
-          {t('queue.approve')}
-        </Button>,
-        <Button className="Button" icon="fas fa-star" onclick={() => this.act(row, 'feature').then(done)}>
-          {t('queue.approve_feature')}
-        </Button>,
-        edit,
-        status !== 'declined' ? (
-          <Button className="Button QueueRow-decline" onclick={() => (this.declining = this.declining === id ? null : id)}>
-            {t('queue.decline')}
-          </Button>
-        ) : null,
-        status !== 'spam' ? (
-          <Button className="Button Button--link" onclick={() => this.act(row, 'spam').then(done)}>
-            {t('queue.spam')}
-          </Button>
-        ) : null,
-      ];
-    }
-    if (status === 'approved') {
-      return [
-        row.isFeatured() ? (
-          <Button className="Button" icon="far fa-star" onclick={() => this.act(row, 'unfeature').then(done)}>
-            {t('controls.unfeature')}
-          </Button>
-        ) : (
-          <Button className="Button" icon="fas fa-star" onclick={() => this.act(row, 'feature').then(done)}>
-            {t('controls.feature')}
-          </Button>
-        ),
-        this.tab === 'featured' ? (
-          <span className="QueueRow-order">
-            <Button className="Button Button--icon" icon="fas fa-arrow-up" aria-label={tx('controls.move_up')} onclick={() => this.act(row, 'up')} />
-            <Button
-              className="Button Button--icon"
-              icon="fas fa-arrow-down"
-              aria-label={tx('controls.move_down')}
-              onclick={() => this.act(row, 'down')}
-            />
-          </span>
-        ) : null,
-        edit,
-        <Button className="Button QueueRow-decline" onclick={() => (this.declining = this.declining === id ? null : id)}>
-          {t('queue.decline')}
-        </Button>,
-      ];
-    }
+  /** The author, when, and what helps judge them: posts, when they joined, their trust level. */
+  who(row: Testimonial): Mithril.Children {
+    const author = row.author();
+    const meta = [
+      author.commentCount !== undefined ? t('queue.posts', { count: author.commentCount }) : null,
+      author.joinedAt
+        ? t('queue.joined', { date: new Date(author.joinedAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) })
+        : null,
+      author.trustLevel !== null && author.trustLevel !== undefined ? t('queue.trust_level', { level: author.trustLevel }) : null,
+    ].filter(Boolean);
+    return (
+      <div className="QueueRow-who">
+        <Avatar row={row} size={38} />
+        <div>
+          <strong>{author.name}</strong> <span className="QueueRow-when">· {humanTime(row.createdAt()!)}</span>
+          <div className="QueueRow-meta">{meta.map((part, i) => [i ? ' · ' : '', part])}</div>
+        </div>
+      </div>
+    );
+  }
+
+  chips(row: Testimonial): Mithril.Children {
+    return (
+      <div className="QueueRow-tags">
+        <Stars value={row.rating()} />
+        <SubjectChip row={row} />
+        <span className="TestimonialChip">{t(`queue.shows.${row.byline()}`)}</span>
+        {row.source() === 'depot' ? <span className="TestimonialChip">{t('queue.from_depot')}</span> : null}
+        {row.editedByStaffAt() ? <span className="TestimonialChip is-warn">{t('queue.edited_by_staff')}</span> : null}
+      </div>
+    );
+  }
+
+  aspects(row: Testimonial): Mithril.Children {
+    const rated = row.aspects() || [];
+    if (!rated.length) return null;
+    const names = app.forum.attribute<Array<{ id: number; name: string }>>('testimonialsAspects') || [];
+    return (
+      <ul className="QueueRow-aspects">
+        {rated.map((a) => {
+          const name = names.find((x) => x.id === a.id)?.name;
+          return name ? (
+            <li>
+              {name} <Stars value={a.rating} />
+            </li>
+          ) : null;
+        })}
+      </ul>
+    );
+  }
+
+  /** What a moderator can do from here, by the testimonial's status. */
+  actions(row: Testimonial): Mithril.Children {
+    const status = row.status();
+    if (status === 'pending' || status === 'declined' || status === 'spam') return this.reviewActions(row);
+    if (status === 'approved') return this.approvedActions(row);
     if (status === 'removed') {
       return (
-        <Button className="Button" onclick={() => this.act(row, 'restore').then(done)}>
+        <Button className="Button" onclick={() => this.act(row, 'restore').then(changed)}>
           {t('controls.restore')}
         </Button>
       );
     }
     return null;
+  }
+
+  editButton(row: Testimonial): Mithril.Children {
+    return row.canEditWording() ? (
+      <Button className="Button" onclick={() => openShare({ testimonial: row })}>
+        {t('queue.edit')}
+      </Button>
+    ) : null;
+  }
+
+  declineButton(row: Testimonial): Mithril.Children {
+    const id = row.id()!;
+    return (
+      <Button className="Button QueueRow-decline" onclick={() => (this.declining = this.declining === id ? null : id)}>
+        {t('queue.decline')}
+      </Button>
+    );
+  }
+
+  /** Pending, declined or spam: approve, approve and feature, edit, decline, spam. */
+  reviewActions(row: Testimonial): Mithril.Children {
+    const status = row.status();
+    return [
+      <Button className="Button Button--primary" onclick={() => this.act(row, 'approve').then(changed)}>
+        {t('queue.approve')}
+      </Button>,
+      <Button className="Button" icon="fas fa-star" onclick={() => this.act(row, 'feature').then(changed)}>
+        {t('queue.approve_feature')}
+      </Button>,
+      this.editButton(row),
+      status !== 'declined' ? this.declineButton(row) : null,
+      status !== 'spam' ? (
+        <Button className="Button Button--link" onclick={() => this.act(row, 'spam').then(changed)}>
+          {t('queue.spam')}
+        </Button>
+      ) : null,
+    ];
+  }
+
+  /** Approved: feature or stop, its place in the strip (Featured tab), edit, decline. */
+  approvedActions(row: Testimonial): Mithril.Children {
+    return [
+      row.isFeatured() ? (
+        <Button className="Button" icon="far fa-star" onclick={() => this.act(row, 'unfeature').then(changed)}>
+          {t('controls.unfeature')}
+        </Button>
+      ) : (
+        <Button className="Button" icon="fas fa-star" onclick={() => this.act(row, 'feature').then(changed)}>
+          {t('controls.feature')}
+        </Button>
+      ),
+      this.tab === 'featured' ? (
+        <span className="QueueRow-order">
+          <Button className="Button Button--icon" icon="fas fa-arrow-up" aria-label={tx('controls.move_up')} onclick={() => this.act(row, 'up')} />
+          <Button
+            className="Button Button--icon"
+            icon="fas fa-arrow-down"
+            aria-label={tx('controls.move_down')}
+            onclick={() => this.act(row, 'down')}
+          />
+        </span>
+      ) : null,
+      this.editButton(row),
+      this.declineButton(row),
+    ];
   }
 
   declineForm(row: Testimonial): Mithril.Children {
