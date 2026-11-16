@@ -95,13 +95,15 @@ app.initializers.add('ernestdefoe-testimonials', () => {
   extend('flarum/forum/components/IndexSidebar', 'navItems', function (items: ItemList<Mithril.Children>) {
     items.add('testimonials', LinkButton.component({ href: app.route('testimonials'), icon: 'fas fa-quote-left' }, t('nav')), 73);
     if (app.forum.attribute('testimonialsCanModerate')) {
-      const pending = Number(app.forum.attribute('testimonialsPending') || 0);
+      const count = Number(app.forum.attribute('testimonialsPending'));
+      const pending = Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
       items.add(
         'testimonialsQueue',
-        // The count rides on an attribute, drawn by CSS: core's SelectDropdown shows the active
-        // item's label a second time in its toggle, and a badge element in that label would be one
-        // vnode in two places. Then a change in the count (an approval) threw in the redraw and
-        // froze the page: the approved row stayed until a refresh.
+        // The label is the plain text alone, and the count rides on an attribute that CSS draws as
+        // a badge. Core's SelectDropdown shows the active item's label a second time in its toggle,
+        // so a badge element there would be one vnode in two places: a change in the count (an
+        // approval) threw in the redraw and froze the page. And menus that read the label as text
+        // (Header Nav's overflow menu) would glue the count, or "null", onto the name.
         LinkButton.component(
           {
             href: app.route('testimonials.queue'),
