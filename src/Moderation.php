@@ -32,6 +32,30 @@ class Moderation
     /** @param array<string, mixed> $in */
     public function act(Testimonial $row, string $action, array $in, User $actor): void
     {
+        $this->authorize($row, $action, $actor);
+        $wasLive = $row->isLive();
+
+        match ($action) {
+            'approve', 'feature' => $this->approve($row, $action === 'feature', $in, $actor),
+            'unfeature' => $this->unfeature($row),
+            'decline', 'spam' => $this->decline($row, $action, $in, $actor),
+            'remove' => $this->setRemoved($row, true),
+            'restore' => $this->setRemoved($row, false),
+            'up', 'down' => $this->move($row, $action === 'up' ? -1 : 1),
+            // authorize() already refused anything else.
+            default => throw new PermissionDeniedException(),
+        };
+
+        if (! $wasLive && $row->isLive()) {
+            $this->events->dispatch(new Approved($row, $actor));
+        } elseif ($wasLive && ! $row->isLive()) {
+            $this->events->dispatch(new Withdrawn($row));
+        }
+        $this->changed();
+    }
+
+    private function authorize(Testimonial $row, string $action, User $actor): void
+    {
         $allowed = match ($action) {
             'remove' => $this->access->canRemove($row, $actor),
             'restore' => $this->access->canRestore($row, $actor),
@@ -40,77 +64,69 @@ class Moderation
         if (! $allowed) {
             throw new PermissionDeniedException();
         }
+    }
 
-        $wasLive = $row->isLive();
-
-        switch ($action) {
-            case 'approve':
-            case 'feature':
-                if ($row->status === 'removed') {
-                    throw new Refusal('removed');
-                }
-                $fresh = $row->status !== 'approved';
-                $row->status = 'approved';
-                $row->decline_reason = null;
-                if ($fresh) {
-                    $row->approved_by = $actor->id;
-                    $row->approved_at = Carbon::now();
-                }
-                if ($action === 'feature') {
-                    $row->is_featured = true;
-                    $row->featured_order = (int) Testimonial::query()->where('is_featured', true)->max('featured_order') + 1;
-                    $row->featured_until = $this->until($in['until'] ?? null);
-                }
-                $row->save();
-                $this->notifications->delete(new Notification\DeclinedBlueprint($row));
-                if ($action === 'feature') {
-                    $this->notify(new Notification\FeaturedBlueprint($row), $row, $actor);
-                } elseif ($fresh) {
-                    $this->notify(new Notification\ApprovedBlueprint($row), $row, $actor);
-                }
-                break;
-
-            case 'unfeature':
-                $row->is_featured = false;
-                $row->featured_until = null;
-                $row->save();
-                break;
-
-            case 'decline':
-            case 'spam':
-                $row->status = $action === 'spam' ? 'spam' : 'declined';
-                $row->decline_reason = $action === 'decline' ? (mb_substr(trim(strip_tags((string) ($in['reason'] ?? ''))), 0, 500) ?: null) : null;
-                $row->is_featured = false;
-                $row->save();
-                if ($action === 'decline') {
-                    $this->notify(new Notification\DeclinedBlueprint($row), $row, $actor);
-                }
-                break;
-
-            case 'remove':
-                $row->status = 'removed';
-                $row->removed_at = Carbon::now();
-                $row->save();
-                break;
-
-            case 'restore':
-                $row->status = $row->approved_at ? 'approved' : 'pending';
-                $row->removed_at = null;
-                $row->save();
-                break;
-
-            case 'up':
-            case 'down':
-                $this->move($row, $action === 'up' ? -1 : 1);
-                break;
+    /**
+     * Approve (and, for "feature", put it at the end of the featured strip). The author hears of
+     * it once: "featured", or "approved" the first time it goes up.
+     *
+     * @param array<string, mixed> $in
+     */
+    private function approve(Testimonial $row, bool $feature, array $in, User $actor): void
+    {
+        if ($row->status === 'removed') {
+            throw new Refusal('removed');
         }
-
-        if (! $wasLive && $row->isLive()) {
-            $this->events->dispatch(new Approved($row, $actor));
-        } elseif ($wasLive && ! $row->isLive()) {
-            $this->events->dispatch(new Withdrawn($row));
+        $fresh = $row->status !== 'approved';
+        $row->status = 'approved';
+        $row->decline_reason = null;
+        if ($fresh) {
+            $row->approved_by = $actor->id;
+            $row->approved_at = Carbon::now();
         }
-        $this->changed();
+        if ($feature) {
+            $row->is_featured = true;
+            $row->featured_order = (int) Testimonial::query()->where('is_featured', true)->max('featured_order') + 1;
+            $row->featured_until = $this->until($in['until'] ?? null);
+        }
+        $row->save();
+        $this->notifications->delete(new Notification\DeclinedBlueprint($row));
+        if ($feature) {
+            $this->notify(new Notification\FeaturedBlueprint($row), $row, $actor);
+        } elseif ($fresh) {
+            $this->notify(new Notification\ApprovedBlueprint($row), $row, $actor);
+        }
+    }
+
+    private function unfeature(Testimonial $row): void
+    {
+        $row->is_featured = false;
+        $row->featured_until = null;
+        $row->save();
+    }
+
+    /**
+     * Decline (with an optional reason the author is told) or mark as spam (silently).
+     *
+     * @param array<string, mixed> $in
+     */
+    private function decline(Testimonial $row, string $action, array $in, User $actor): void
+    {
+        $row->status = $action === 'spam' ? 'spam' : 'declined';
+        $row->decline_reason = $action === 'decline' ? (mb_substr(trim(strip_tags((string) ($in['reason'] ?? ''))), 0, 500) ?: null) : null;
+        $row->is_featured = false;
+        $row->save();
+        if ($action === 'decline') {
+            $this->notify(new Notification\DeclinedBlueprint($row), $row, $actor);
+        }
+    }
+
+    /** Take it down, or bring it back to where it was (approved, or the queue if it never was). */
+    private function setRemoved(Testimonial $row, bool $removed): void
+    {
+        $row->status = $removed ? 'removed' : ($row->approved_at ? 'approved' : 'pending');
+        $row->removed_at = $removed ? Carbon::now() : null;
+        $row->save();
     }
 
     /** Written by someone whose testimonials need no review: live at once, no "approved" alert. */

@@ -75,62 +75,73 @@ class Writer
         }
     }
 
-    /** @param array<string, mixed> $in */
+    /**
+     * The author's edit (goes back for review unless they need none), the author hiding it from
+     * Depot, or a moderator's change to the wording only.
+     *
+     * @param array<string, mixed> $in
+     */
     public function update(Testimonial $row, array $in, User $actor): void
     {
         if (array_key_exists('hiddenByAuthor', $in)) {
-            if (! $this->access->canHide($row, $actor)) {
-                throw new PermissionDeniedException();
-            }
-            $row->hidden_by_author = (bool) $in['hiddenByAuthor'];
+            $this->hide($row, (bool) $in['hiddenByAuthor'], $actor);
+        } elseif ($this->access->canEdit($row, $actor)) {
+            $this->edit($row, $in, $actor);
+        } elseif ($this->access->canEditWording($row, $actor)) {
+            $this->editWording($row, $in, $actor);
+        } else {
+            throw new PermissionDeniedException();
+        }
+    }
+
+    private function hide(Testimonial $row, bool $hidden, User $actor): void
+    {
+        if (! $this->access->canHide($row, $actor)) {
+            throw new PermissionDeniedException();
+        }
+        $row->hidden_by_author = $hidden;
+        $row->save();
+        $this->moderation->changed();
+    }
+
+    /** @param array<string, mixed> $in */
+    private function edit(Testimonial $row, array $in, User $actor): void
+    {
+        $wasLive = $row->isLive();
+        $this->fill($row, $in, false);
+        // A changed testimonial is read again before it goes back up.
+        $changed = $row->isDirty(['body', 'headline', 'rating', 'byline']) || $this->aspectsChanged($row, $in);
+        if ($changed && $row->status !== 'pending' && ! $this->access->autoApproves($actor)) {
+            $row->status = 'pending';
+        }
+        $aspects = array_key_exists('aspects', $in) ? $this->aspects($in) : null;
+        $this->db->transaction(function () use ($row, $aspects) {
             $row->save();
-            $this->moderation->changed();
-
-            return;
+            if ($aspects !== null) {
+                $this->saveAspects($row, $aspects);
+            }
+        });
+        if ($wasLive && ! $row->isLive()) {
+            $this->events->dispatch(new Withdrawn($row));
         }
+        $this->moderation->changed();
+    }
 
-        if ($this->access->canEdit($row, $actor)) {
-            $wasLive = $row->isLive();
-            $this->fill($row, $in, false);
-            if ($row->isDirty(['body', 'headline', 'rating', 'byline']) || $this->aspectsChanged($row, $in)) {
-                // A changed testimonial is read again before it goes back up.
-                if ($row->status !== 'pending' && ! $this->access->autoApproves($actor)) {
-                    $row->status = 'pending';
-                }
-            }
-            $aspects = array_key_exists('aspects', $in) ? $this->aspects($in) : null;
-            $this->db->transaction(function () use ($row, $aspects) {
-                $row->save();
-                if ($aspects !== null) {
-                    $this->saveAspects($row, $aspects);
-                }
-            });
-            if ($wasLive && ! $row->isLive()) {
-                $this->events->dispatch(new Withdrawn($row));
-            }
-            $this->moderation->changed();
-
-            return;
+    /** @param array<string, mixed> $in */
+    private function editWording(Testimonial $row, array $in, User $actor): void
+    {
+        $before = [$row->body, $row->headline];
+        if (array_key_exists('body', $in)) {
+            $row->body = $this->body($in['body']);
         }
-
-        if ($this->access->canEditWording($row, $actor)) {
-            $before = [$row->body, $row->headline];
-            if (array_key_exists('body', $in)) {
-                $row->body = $this->body($in['body']);
-            }
-            if (array_key_exists('headline', $in)) {
-                $row->headline = $this->headline($in['headline']);
-            }
-            if ([$row->body, $row->headline] !== $before) {
-                $row->edited_by_staff_at = Carbon::now();
-                $row->save();
-                $this->moderation->editedByStaff($row, $actor);
-            }
-
-            return;
+        if (array_key_exists('headline', $in)) {
+            $row->headline = $this->headline($in['headline']);
         }
-
-        throw new PermissionDeniedException();
+        if ([$row->body, $row->headline] !== $before) {
+            $row->edited_by_staff_at = Carbon::now();
+            $row->save();
+            $this->moderation->editedByStaff($row, $actor);
+        }
     }
 
     /** @param array<string, mixed> $in */

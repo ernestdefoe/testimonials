@@ -15,6 +15,7 @@ use Flarum\Api\Endpoint;
 use Flarum\Api\Resource\AbstractDatabaseResource;
 use Flarum\Api\Schema;
 use Flarum\User\Exception\PermissionDeniedException;
+use Flarum\User\User;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Builder;
 use Tobyz\JsonApiServer\Context as BaseContext;
@@ -137,11 +138,44 @@ class TestimonialResource extends AbstractDatabaseResource
         $actor = $context->getActor();
         $query->select('testimonials.*');
 
+        $this->whose($query, $actor, $filters);
+        $this->about($query, $filters);
+
+        $min = (int) ($filters['minRating'] ?? 0);
+        if ($min >= 1 && $min <= 5) {
+            $query->where('testimonials.rating', '>=', $min);
+        }
+        if (! empty($filters['notFeatured'])) {
+            // The page lists these under its featured strip: no testimonial twice.
+            $query->where(fn (Builder $q) => $q->where('testimonials.is_featured', false)
+                ->orWhere('testimonials.featured_until', '<=', \Carbon\Carbon::now()));
+        }
+        $this->order($query, $filters);
+
+        if ($pagination instanceof PeekPagination) {
+            $pagination->apply($query);
+        }
+
+        return $context->withQuery($query);
+    }
+
+    /**
+     * Which ones: the viewer's own, a moderator's queue tab, or the live ones (on a profile, only
+     * those posted under the member's full name, unless it's their own or a moderator looks).
+     *
+     * @param Builder<Testimonial> $query
+     * @param array<string, mixed> $filters
+     */
+    private function whose(Builder $query, User $actor, array $filters): void
+    {
         $status = (string) ($filters['status'] ?? '');
         if (! empty($filters['mine'])) {
             $actor->assertRegistered();
             $query->where('testimonials.user_id', $actor->id);
-        } elseif ($status !== '' && Presenter::canModerate($actor)) {
+
+            return;
+        }
+        if ($status !== '' && Presenter::canModerate($actor)) {
             $status === 'featured'
                 ? $query->where('testimonials.status', 'approved')->where('testimonials.is_featured', true)
                 : $query->where('testimonials.status', in_array($status, Testimonial::STATUSES, true) ? $status : 'pending');
@@ -149,42 +183,46 @@ class TestimonialResource extends AbstractDatabaseResource
             $query->live($this->settings->depotSource());
         }
 
-        if (isset($filters['user']) && empty($filters['mine'])) {
+        if (isset($filters['user'])) {
             $query->where('testimonials.user_id', (int) $filters['user']);
             // A profile never lists what was posted anonymously or under a first name (it would name them).
             if (! Presenter::canModerate($actor) && (int) $filters['user'] !== (int) $actor->id) {
                 $query->where('testimonials.byline', 'full');
             }
         }
+    }
 
+    /**
+     * About what: the community, a tag, a download or a post; by id, or (from a widget's settings)
+     * by the tag's or download's slug.
+     *
+     * @param Builder<Testimonial> $query
+     * @param array<string, mixed> $filters
+     */
+    private function about(Builder $query, array $filters): void
+    {
         $subject = (string) ($filters['subject'] ?? '');
-        if (in_array($subject, Testimonial::SUBJECTS, true)) {
-            $query->where('testimonials.subject_type', $subject);
-            if ($subject !== 'community') {
-                // By id, or (from a widget's settings) by the tag's or download's slug.
-                $id = isset($filters['subjectId']) ? (int) $filters['subjectId']
-                    : (isset($filters['slug']) ? $this->subjects->idForSlug($subject, (string) $filters['slug']) : null);
-                if (isset($filters['subjectId']) || isset($filters['slug'])) {
-                    $query->where('testimonials.subject_id', $id ?? 0);
-                }
-            }
+        if (! in_array($subject, Testimonial::SUBJECTS, true)) {
+            return;
         }
-
-        $min = (int) ($filters['minRating'] ?? 0);
-        if ($min >= 1 && $min <= 5) {
-            $query->where('testimonials.rating', '>=', $min);
+        $query->where('testimonials.subject_type', $subject);
+        if ($subject !== 'community' && (isset($filters['subjectId']) || isset($filters['slug']))) {
+            $id = isset($filters['subjectId']) ? (int) $filters['subjectId'] : $this->subjects->idForSlug($subject, (string) $filters['slug']);
+            $query->where('testimonials.subject_id', $id ?? 0);
         }
+    }
 
-        if (! empty($filters['notFeatured'])) {
-            // The page lists these under its featured strip: no testimonial twice.
-            $query->where(fn (Builder $q) => $q->where('testimonials.is_featured', false)
-                ->orWhere('testimonials.featured_until', '<=', \Carbon\Carbon::now()));
-        }
-
+    /**
+     * The featured strip in the moderators' order, or featured first then the newest, or the newest.
+     *
+     * @param Builder<Testimonial> $query
+     * @param array<string, mixed> $filters
+     */
+    private function order(Builder $query, array $filters): void
+    {
         if (! empty($filters['featured'])) {
             $query->featuredNow()->orderBy('testimonials.featured_order');
         } elseif (($filters['sort'] ?? '') === 'featured') {
-            // Featured first (in their order), then the newest.
             // 🚨 Raw SQL gets no table prefix: the columns go through the grammar.
             $grammar = $query->getQuery()->getGrammar();
             $featured = $grammar->wrap('testimonials.is_featured');
@@ -193,12 +231,6 @@ class TestimonialResource extends AbstractDatabaseResource
                 ->orderBy('testimonials.featured_order');
         }
         $query->orderByDesc('testimonials.created_at')->orderByDesc('testimonials.id');
-
-        if ($pagination instanceof PeekPagination) {
-            $pagination->apply($query);
-        }
-
-        return $context->withQuery($query);
     }
 
     /** @param Builder<Testimonial> $query */

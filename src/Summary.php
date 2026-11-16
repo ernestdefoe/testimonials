@@ -52,9 +52,10 @@ class Summary
     /** @return array<string, mixed> */
     private function build(User $actor, ?string $type, ?int $id, bool $bySubject): array
     {
-        $scope = function (Builder $q) use ($actor, $type, $id) {
+        $depot = $this->settings->depotSource();
+        $scope = function (Builder $q) use ($actor, $type, $id, $depot) {
             $q->whereVisibleTo($actor);
-            Testimonial::onlyLive($q, $this->settings->depotSource());
+            Testimonial::onlyLive($q, $depot);
             if ($type) {
                 $q->where('testimonials.subject_type', $type);
                 if ($id !== null) {
@@ -63,11 +64,31 @@ class Summary
             }
         };
 
-        // 🚨 Raw SQL gets no table prefix: every column goes through the grammar (Summary::col).
-        $col = fn (string $column) => $this->col($column);
+        [$count, $spread, $sum] = $this->stars($scope);
+        $rated = array_sum($spread);
 
+        return [
+            'subjects' => $bySubject ? $this->bySubject($scope) : null,
+            'count' => $count,
+            'rated' => $rated,
+            'average' => $rated ? round($sum / $rated, 1) : null,
+            'spread' => $spread,
+            'aspects' => $rated && $this->settings->ratings() ? $this->aspects($scope) : [],
+        ];
+    }
+
+    // 🚨 Raw SQL gets no table prefix: every column below goes through the grammar (Summary::col).
+
+    /**
+     * How many, the 5→1 spread of the rated ones, and their star total.
+     *
+     * @param callable(Builder<Testimonial>): void $scope
+     * @return array{int, array<int, int>, int}
+     */
+    private function stars(callable $scope): array
+    {
         $rows = Testimonial::query()->tap($scope)
-            ->selectRaw($col('testimonials.rating').' as stars, COUNT(*) as n')
+            ->selectRaw($this->col('testimonials.rating').' as stars, COUNT(*) as n')
             ->groupBy('testimonials.rating')
             ->toBase()->get();
 
@@ -82,59 +103,69 @@ class Summary
                 $sum += $n * (int) $row->stars;
             }
         }
-        $rated = array_sum($spread);
+
+        return [$count, $spread, $sum];
+    }
+
+    /**
+     * Each configured aspect's average, in the admin's order, for the aspects anyone rated.
+     *
+     * @param callable(Builder<Testimonial>): void $scope
+     * @return list<array{id: int, name: string, average: float, count: int}>
+     */
+    private function aspects(callable $scope): array
+    {
+        $names = array_column($this->settings->aspects(), 'name', 'id');
+        if (! $names) {
+            return [];
+        }
+        $byAspect = Testimonial::query()->tap($scope)
+            ->join('testimonial_ratings', 'testimonial_ratings.testimonial_id', '=', 'testimonials.id')
+            ->whereIn('testimonial_ratings.aspect_id', array_keys($names))
+            ->selectRaw($this->col('testimonial_ratings.aspect_id').' as aspect, AVG('.$this->col('testimonial_ratings.rating').') as average, COUNT(*) as n')
+            ->groupBy('testimonial_ratings.aspect_id')
+            ->toBase()->get()->keyBy('aspect');
 
         $aspects = [];
-        $names = array_column($this->settings->aspects(), 'name', 'id');
-        if ($rated && $this->settings->ratings() && $names) {
-            $byAspect = Testimonial::query()->tap($scope)
-                ->join('testimonial_ratings', 'testimonial_ratings.testimonial_id', '=', 'testimonials.id')
-                ->whereIn('testimonial_ratings.aspect_id', array_keys($names))
-                ->selectRaw($col('testimonial_ratings.aspect_id').' as aspect, AVG('.$col('testimonial_ratings.rating').') as average, COUNT(*) as n')
-                ->groupBy('testimonial_ratings.aspect_id')
-                ->toBase()->get()->keyBy('aspect');
-            foreach ($names as $aspectId => $name) {
-                if ($row = $byAspect->get($aspectId)) {
-                    $aspects[] = ['id' => $aspectId, 'name' => $name, 'average' => round((float) $row->average, 1), 'count' => (int) $row->n];
-                }
+        foreach ($names as $aspectId => $name) {
+            if ($row = $byAspect->get($aspectId)) {
+                $aspects[] = ['id' => (int) $aspectId, 'name' => (string) $name, 'average' => round((float) $row->average, 1), 'count' => (int) $row->n];
             }
         }
 
-        $subjects = null;
-        if ($bySubject) {
-            $groups = Testimonial::query()->tap($scope)
-                ->selectRaw($col('testimonials.subject_type').' as type, '.$col('testimonials.subject_id').' as sid, COUNT(*) as n')
-                ->groupBy('testimonials.subject_type', 'testimonials.subject_id')
-                ->toBase()->get();
-            // Labels for every group in one query per kind (Subjects).
-            $rows = $groups->map(fn ($g) => new Testimonial(['subject_type' => $g->type, 'subject_id' => $g->sid === null ? null : (int) $g->sid]))->all();
-            $this->subjects->prime($rows);
-            $subjects = [];
-            foreach ($groups as $i => $g) {
-                $s = $this->subjects->of($rows[$i]);
-                if ($s['type'] === 'community' || $s['type'] === 'post' || $s['label'] !== null) {
-                    $subjects[] = ['type' => $s['type'], 'id' => $s['id'], 'label' => $s['label'], 'count' => (int) $g->n];
-                }
-            }
-            // Testimonials from posts count as community ones on the chips.
-            $merged = [];
-            foreach ($subjects as $s) {
-                $k = $s['type'] === 'post' ? 'community' : $s['type'].':'.$s['id'];
-                $merged[$k] ??= ['type' => $s['type'] === 'post' ? 'community' : $s['type'], 'id' => $s['type'] === 'post' ? null : $s['id'], 'label' => $s['type'] === 'post' ? null : $s['label'], 'count' => 0];
-                $merged[$k]['count'] += $s['count'];
-            }
-            usort($merged, fn ($a, $b) => $b['count'] <=> $a['count']);
-            $subjects = $merged;
-        }
+        return $aspects;
+    }
 
-        return [
-            'subjects' => $subjects,
-            'count' => $count,
-            'rated' => $rated,
-            'average' => $rated ? round($sum / $rated, 1) : null,
-            'spread' => $spread,
-            'aspects' => $aspects,
-        ];
+    /**
+     * The chips: how many per subject, most first. Testimonials from posts count as community ones.
+     *
+     * @param callable(Builder<Testimonial>): void $scope
+     * @return list<array{type: string, id: int|null, label: string|null, count: int}>
+     */
+    private function bySubject(callable $scope): array
+    {
+        $groups = Testimonial::query()->tap($scope)
+            ->selectRaw($this->col('testimonials.subject_type').' as type, '.$this->col('testimonials.subject_id').' as sid, COUNT(*) as n')
+            ->groupBy('testimonials.subject_type', 'testimonials.subject_id')
+            ->toBase()->get();
+        // Labels for every group in one query per kind (Subjects).
+        $rows = $groups->map(fn ($g) => new Testimonial(['subject_type' => $g->type, 'subject_id' => $g->sid === null ? null : (int) $g->sid]))->all();
+        $this->subjects->prime($rows);
+
+        $merged = [];
+        foreach ($groups as $i => $g) {
+            $s = $this->subjects->of($rows[$i]);
+            if ($s['type'] !== 'community' && $s['type'] !== 'post' && $s['label'] === null) {
+                continue;
+            }
+            $community = $s['type'] === 'post' || $s['type'] === 'community';
+            $k = $community ? 'community' : $s['type'].':'.$s['id'];
+            $merged[$k] ??= ['type' => $community ? 'community' : $s['type'], 'id' => $community ? null : $s['id'], 'label' => $community ? null : $s['label'], 'count' => 0];
+            $merged[$k]['count'] += (int) $g->n;
+        }
+        usort($merged, fn ($a, $b) => $b['count'] <=> $a['count']);
+
+        return $merged;
     }
 
     /** A column, quoted and with the table prefix, for raw SQL. */
