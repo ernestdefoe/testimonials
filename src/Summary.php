@@ -54,7 +54,7 @@ class Summary
     {
         $scope = function (Builder $q) use ($actor, $type, $id) {
             $q->whereVisibleTo($actor);
-            Testimonial::onlyLive($q);
+            Testimonial::onlyLive($q, $this->settings->depotSource());
             if ($type) {
                 $q->where('testimonials.subject_type', $type);
                 if ($id !== null) {

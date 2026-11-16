@@ -2,6 +2,7 @@
 
 namespace ErnestDefoe\Testimonials\Api;
 
+use ErnestDefoe\Testimonials\Subjects;
 use ErnestDefoe\Testimonials\Summary;
 use Flarum\Http\RequestUtil;
 use Illuminate\Support\Arr;
@@ -18,8 +19,10 @@ use Psr\Http\Server\RequestHandlerInterface;
  */
 class SummaryController implements RequestHandlerInterface
 {
-    public function __construct(private readonly Summary $summary)
-    {
+    public function __construct(
+        private readonly Summary $summary,
+        private readonly Subjects $subjects,
+    ) {
     }
 
     public function handle(ServerRequestInterface $request): ResponseInterface
@@ -27,7 +30,7 @@ class SummaryController implements RequestHandlerInterface
         $query = $request->getQueryParams();
         $id = Arr::get($query, 'subjectId');
         if (! is_numeric($id) && ($slug = Arr::get($query, 'slug'))) {
-            $id = resolve(\ErnestDefoe\Testimonials\Subjects::class)->idForSlug((string) Arr::get($query, 'subject'), (string) $slug) ?? 0;
+            $id = $this->subjects->idForSlug((string) Arr::get($query, 'subject'), (string) $slug) ?? 0;
         }
 
         return new JsonResponse($this->summary->for(

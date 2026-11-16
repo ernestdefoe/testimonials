@@ -233,7 +233,7 @@ class Writer
         if (! array_key_exists('aspects', $in)) {
             return false;
         }
-        $now = $this->db->table('testimonial_ratings')->where('testimonial_id', $row->id)->pluck('rating', 'aspect_id')->map(fn ($r) => (int) $r)->all();
+        $now = Rating::of([$row->id])->pluck('rating', 'aspect_id')->map(fn ($r) => (int) $r)->all();
         $next = $this->aspects($in);
         ksort($now);
         ksort($next);
@@ -244,9 +244,9 @@ class Writer
     /** @param array<int, int> $aspects */
     private function saveAspects(Testimonial $row, array $aspects): void
     {
-        $this->db->table('testimonial_ratings')->where('testimonial_id', $row->id)->delete();
+        Rating::of([$row->id])->delete();
         if ($aspects) {
-            $this->db->table('testimonial_ratings')->insert(array_map(
+            Rating::query()->insert(array_map(
                 fn ($id, $rating) => ['testimonial_id' => $row->id, 'aspect_id' => $id, 'rating' => $rating],
                 array_keys($aspects),
                 $aspects,

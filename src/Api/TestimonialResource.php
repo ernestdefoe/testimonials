@@ -6,6 +6,8 @@ use ErnestDefoe\Testimonials\Access;
 use ErnestDefoe\Testimonials\Event\Withdrawn;
 use ErnestDefoe\Testimonials\Moderation;
 use ErnestDefoe\Testimonials\Presenter;
+use ErnestDefoe\Testimonials\Settings;
+use ErnestDefoe\Testimonials\Subjects;
 use ErnestDefoe\Testimonials\Testimonial;
 use ErnestDefoe\Testimonials\Writer;
 use Flarum\Api\Context;
@@ -13,6 +15,7 @@ use Flarum\Api\Endpoint;
 use Flarum\Api\Resource\AbstractDatabaseResource;
 use Flarum\Api\Schema;
 use Flarum\User\Exception\PermissionDeniedException;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Builder;
 use Tobyz\JsonApiServer\Context as BaseContext;
 use Tobyz\JsonApiServer\Pagination\Pagination;
@@ -40,10 +43,15 @@ class TestimonialResource extends AbstractDatabaseResource
     /** Attributes the form and the queue send; Writer applies them together. */
     private const INPUTS = ['headline', 'body', 'rating', 'byline', 'consent', 'consentExternal', 'subjectType', 'subjectId', 'aspects', 'hiddenByAuthor'];
 
-    // Built on every API request: only what reads need, and no queries. The writer is resolved on a write.
+    // Built on every API request: constructors only, no queries or settings reads.
     public function __construct(
         private readonly Presenter $presenter,
         private readonly Access $access,
+        private readonly Writer $writer,
+        private readonly Subjects $subjects,
+        private readonly Moderation $moderation,
+        private readonly Dispatcher $dispatcher,
+        private readonly Settings $settings,
     ) {
     }
 
@@ -138,7 +146,7 @@ class TestimonialResource extends AbstractDatabaseResource
                 ? $query->where('testimonials.status', 'approved')->where('testimonials.is_featured', true)
                 : $query->where('testimonials.status', in_array($status, Testimonial::STATUSES, true) ? $status : 'pending');
         } else {
-            $query->live();
+            $query->live($this->settings->depotSource());
         }
 
         if (isset($filters['user']) && empty($filters['mine'])) {
@@ -155,7 +163,7 @@ class TestimonialResource extends AbstractDatabaseResource
             if ($subject !== 'community') {
                 // By id, or (from a widget's settings) by the tag's or download's slug.
                 $id = isset($filters['subjectId']) ? (int) $filters['subjectId']
-                    : (isset($filters['slug']) ? resolve(\ErnestDefoe\Testimonials\Subjects::class)->idForSlug($subject, (string) $filters['slug']) : null);
+                    : (isset($filters['slug']) ? $this->subjects->idForSlug($subject, (string) $filters['slug']) : null);
                 if (isset($filters['subjectId']) || isset($filters['slug'])) {
                     $query->where('testimonials.subject_id', $id ?? 0);
                 }
@@ -217,7 +225,7 @@ class TestimonialResource extends AbstractDatabaseResource
     /** @param Context $context */
     public function creating(object $model, BaseContext $context): ?object
     {
-        resolve(Writer::class)->create($model, $this->attributes($context), $context->getActor());
+        $this->writer->create($model, $this->attributes($context), $context->getActor());
 
         return $model;
     }
@@ -225,7 +233,7 @@ class TestimonialResource extends AbstractDatabaseResource
     /** @param Context $context */
     public function updating(object $model, BaseContext $context): ?object
     {
-        resolve(Writer::class)->update($model, $this->attributes($context), $context->getActor());
+        $this->writer->update($model, $this->attributes($context), $context->getActor());
 
         return $model;
     }
@@ -239,9 +247,9 @@ class TestimonialResource extends AbstractDatabaseResource
         $wasLive = $model->isLive();
         $model->delete();
         if ($wasLive) {
-            resolve(\Illuminate\Contracts\Events\Dispatcher::class)->dispatch(new Withdrawn($model));
+            $this->dispatcher->dispatch(new Withdrawn($model));
         }
-        resolve(Moderation::class)->changed();
+        $this->moderation->changed();
     }
 
     /** @return array<string, mixed> */

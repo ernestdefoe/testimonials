@@ -3,6 +3,7 @@
 namespace ErnestDefoe\Testimonials\Listener;
 
 use ErnestDefoe\Testimonials\Moderation;
+use ErnestDefoe\Testimonials\Rating;
 use ErnestDefoe\Testimonials\Testimonial;
 use Flarum\User\Event\Deleting as UserDeleting;
 use Illuminate\Database\ConnectionInterface;
@@ -24,8 +25,7 @@ class Cleanup
     {
         $ids = Testimonial::query()->where('user_id', $event->user->id)->pluck('id')->all();
         if ($ids) {
-            $this->db->table('testimonial_ratings')->whereIn('testimonial_id', $ids)->delete();
-            Testimonial::query()->whereIn('id', $ids)->delete();
+            Rating::deleteWithTestimonials($ids);
             $this->moderation->changed();
         }
     }
@@ -35,10 +35,35 @@ class Cleanup
     {
         $ids = Testimonial::query()->where('subject_type', $type)->where('subject_id', $id)->pluck('id')->all();
         if ($ids) {
-            $this->db->table('testimonial_ratings')->whereIn('testimonial_id', $ids)->delete();
-            Testimonial::query()->whereIn('id', $ids)->delete();
+            Rating::deleteWithTestimonials($ids);
             $this->moderation->changed();
         }
+    }
+
+    /**
+     * A deleted tag (from the `eloquent.deleted` event, which passes the model, or the model in a
+     * payload array depending on how it was dispatched).
+     */
+    public function tag(mixed $event, mixed $models = null): void
+    {
+        $this->subject('tag', (int) self::model($event, $models)->id);
+    }
+
+    /** A deleted Depot download. */
+    public function depotFile(mixed $event, mixed $models = null): void
+    {
+        $this->subject('depot', (int) self::model($event, $models)->id);
+    }
+
+    /** Post and discussion deletions: the payload doesn't matter, the orphans are found afresh. */
+    public function postsGone(): void
+    {
+        $this->posts();
+    }
+
+    private static function model(mixed $event, mixed $models): object
+    {
+        return is_object($event) ? $event : $models[0];
     }
 
     /**

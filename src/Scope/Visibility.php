@@ -3,6 +3,7 @@
 namespace ErnestDefoe\Testimonials\Scope;
 
 use ErnestDefoe\Testimonials\Extensions;
+use ErnestDefoe\Testimonials\Settings;
 use ErnestDefoe\Testimonials\Testimonial;
 use Flarum\Post\Post;
 use Flarum\User\User;
@@ -20,8 +21,10 @@ use Illuminate\Database\Eloquent\Builder;
  */
 class Visibility
 {
-    public function __construct(private readonly Extensions $extensions)
-    {
+    public function __construct(
+        private readonly Extensions $extensions,
+        private readonly Settings $settings,
+    ) {
     }
 
     public function __invoke(User $actor, Builder $query): void
@@ -32,8 +35,9 @@ class Visibility
 
         $query->where(function (Builder $q) use ($actor) {
             if ($actor->hasPermission('testimonials.view')) {
-                $q->where(function (Builder $live) use ($actor) {
-                    Testimonial::onlyLive($live);
+                $depot = $this->settings->depotSource();
+                $q->where(function (Builder $live) use ($actor, $depot) {
+                    Testimonial::onlyLive($live, $depot);
                     $live->where(function (Builder $subject) use ($actor) {
                         $subject->where('testimonials.subject_type', 'community');
                         $subject->orWhere(fn (Builder $s) => $s->where('testimonials.subject_type', 'post')

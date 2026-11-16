@@ -38,6 +38,18 @@ class Nudge
             ->where('user_id', $actor->id)->where('source', 'native')->exists());
     }
 
+    /**
+     * A testimonial was written or deleted (`eloquent.created` / `eloquent.deleted`): ask its
+     * author's "have you written one?" question again next time.
+     */
+    public function forget(mixed $event, mixed $models = null): void
+    {
+        $row = is_object($event) ? $event : $models[0];
+        if ($row instanceof Testimonial && $row->user_id) {
+            $this->cache->forget(self::key((int) $row->user_id));
+        }
+    }
+
     public static function key(int $userId): string
     {
         return 'ernestdefoe-testimonials.wrote.'.$userId;

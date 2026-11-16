@@ -46,22 +46,14 @@ class Testimonial extends AbstractModel
 
     protected $table = 'testimonials';
 
-    protected $guarded = [];
+    /** What may be set in one go: Depot's mirror (Depot\Mirror) and the summary's subject stubs. Writer sets each field itself. */
+    protected $fillable = [
+        'user_id', 'source', 'source_id', 'subject_type', 'subject_id', 'body', 'rating', 'byline',
+        'status', 'consent_at', 'consent_external', 'approved_at',
+    ];
 
     // AbstractModel turns timestamps off; this table has them.
     public $timestamps = true;
-
-    protected static function booted(): void
-    {
-        // Nudge caches whether a member has written one; a new or deleted row makes it ask again.
-        $forget = function (self $row): void {
-            if ($row->user_id) {
-                resolve(\Illuminate\Contracts\Cache\Repository::class)->forget(Nudge::key((int) $row->user_id));
-            }
-        };
-        static::created($forget);
-        static::deleted($forget);
-    }
 
     protected $casts = [
         'rating' => 'integer',
@@ -100,21 +92,23 @@ class Testimonial extends AbstractModel
      * Qualified columns: other scopes join.
      *
      * @param Builder<Testimonial> $query
+     * @param bool $depot whether Depot reviews count (Settings::depotSource())
      */
-    public function scopeLive(Builder $query): void
+    public function scopeLive(Builder $query, bool $depot): void
     {
-        self::onlyLive($query);
+        self::onlyLive($query, $depot);
     }
 
     /**
      * The same as the `live` scope, for a builder that isn't typed as this model's (a nested where).
      *
      * @param Builder<Testimonial> $query
+     * @param bool $depot whether Depot reviews count (Settings::depotSource())
      */
-    public static function onlyLive(Builder $query): void
+    public static function onlyLive(Builder $query, bool $depot): void
     {
         $query->where('testimonials.status', 'approved')->where('testimonials.hidden_by_author', false);
-        if (! resolve(Settings::class)->depotSource()) {
+        if (! $depot) {
             $query->where('testimonials.source', 'native');
         }
     }

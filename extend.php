@@ -14,18 +14,16 @@
  * map. Constants inside closures are fine.
  */
 
-use ErnestDefoe\Testimonials\Access;
 use ErnestDefoe\Testimonials\Api;
 use ErnestDefoe\Testimonials\Console;
+use ErnestDefoe\Testimonials\Depot\Mirror;
 use ErnestDefoe\Testimonials\Listener\Cleanup;
 use ErnestDefoe\Testimonials\Moderation;
 use ErnestDefoe\Testimonials\Notification;
+use ErnestDefoe\Testimonials\Nudge;
 use ErnestDefoe\Testimonials\Testimonial;
-use Flarum\Api\Context;
 use Flarum\Api\Resource\ForumResource;
-use Flarum\Api\Schema;
 use Flarum\Extend;
-use Flarum\Settings\SettingsRepositoryInterface;
 use Illuminate\Console\Scheduling\Event as ScheduledEvent;
 
 $extenders = [
@@ -64,30 +62,9 @@ $extenders = [
         ->type(Notification\DeclinedBlueprint::class, ['alert'])
         ->type(Notification\EditedBlueprint::class, ['alert']),
 
-    // What the viewer may do (their groups and user row are already loaded: no queries), the
-    // queue count for moderators (one COUNT, only for them), and the nudge (queries only when
-    // the admin turned it on and the member passed its thresholds).
+    // What the viewer may do, the queue count for moderators and the nudge (Api\ForumFields).
     (new Extend\ApiResource(ForumResource::class))
-        ->fields(fn () => [
-            Schema\Boolean::make('testimonialsCanCreate')
-                ->get(fn ($forum, Context $context) => resolve(Access::class)->canCreate($context->getActor())),
-            Schema\Str::make('testimonialsCreateRefusal')->nullable()
-                ->visible(fn ($forum, Context $context) => ! $context->getActor()->isGuest())
-                ->get(fn ($forum, Context $context) => resolve(Access::class)->createRefusal($context->getActor())),
-            Schema\Integer::make('testimonialsPending')
-                ->visible(fn ($forum, Context $context) => $context->getActor()->hasPermission('testimonials.moderate'))
-                ->get(fn () => Testimonial::query()->where('status', 'pending')->count()),
-            Schema\Boolean::make('testimonialsNudge')
-                ->visible(fn ($forum, Context $context) => ! $context->getActor()->isGuest()
-                    && (bool) resolve(SettingsRepositoryInterface::class)->get('ernestdefoe-testimonials.nudge'))
-                ->get(fn ($forum, Context $context) => resolve(\ErnestDefoe\Testimonials\Nudge::class)->shows($context->getActor())),
-            Schema\Arr::make('testimonialsAspects')
-                ->get(fn () => resolve(\ErnestDefoe\Testimonials\Settings::class)->aspects()),
-            Schema\Boolean::make('testimonialsDepot')
-                ->get(fn () => resolve(\ErnestDefoe\Testimonials\Extensions::class)->depot()),
-            Schema\Boolean::make('testimonialsCanModerate')
-                ->get(fn ($forum, Context $context) => $context->getActor()->hasPermission('testimonials.moderate')),
-        ]),
+        ->fields(Api\ForumFields::class),
 
     (new Extend\Settings())
         ->default('ernestdefoe-testimonials.ratings', true)
@@ -115,11 +92,19 @@ $extenders = [
 
     (new Extend\Event())
         ->listen(\Flarum\User\Event\Deleting::class, [Cleanup::class, 'user'])
-        ->listen(\Flarum\Post\Event\Deleted::class, fn () => resolve(Cleanup::class)->posts())
-        ->listen(\Flarum\Discussion\Event\Deleted::class, fn () => resolve(Cleanup::class)->posts())
-        ->listen('eloquent.deleted: Flarum\\Tags\\Tag', fn ($event, $models = null) => resolve(Cleanup::class)->subject('tag', (int) ($models[0] ?? $event)->id))
+        ->listen(\Flarum\Post\Event\Deleted::class, [Cleanup::class, 'postsGone'])
+        ->listen(\Flarum\Discussion\Event\Deleted::class, [Cleanup::class, 'postsGone'])
+        // Nudge caches whether a member has written one; a new or deleted row makes it ask again.
+        ->listen('eloquent.created: ErnestDefoe\\Testimonials\\Testimonial', [Nudge::class, 'forget'])
+        ->listen('eloquent.deleted: ErnestDefoe\\Testimonials\\Testimonial', [Nudge::class, 'forget'])
         // A setting can change what guests see (the Depot switch, aspects, ratings): forget the summaries.
-        ->listen(\Flarum\Settings\Event\Saved::class, fn () => resolve(Moderation::class)->changed()),
+        ->listen(\Flarum\Settings\Event\Saved::class, [Moderation::class, 'changed']),
+
+    // A deleted tag takes the testimonials about it.
+    (new Extend\Conditional())
+        ->whenExtensionEnabled('flarum-tags', fn () => [
+            (new Extend\Event())->listen('eloquent.deleted: Flarum\\Tags\\Tag', [Cleanup::class, 'tag']),
+        ]),
 
     (new Extend\Console())
         ->command(Console\PurgeCommand::class)
@@ -141,9 +126,9 @@ $extenders = [
     (new Extend\Conditional())
         ->whenExtensionEnabled('ernestdefoe-depot', fn () => [
             (new Extend\Event())
-                ->listen('eloquent.saved: ErnestDefoe\\Depot\\Model\\Review', fn ($event, $models = null) => resolve(\ErnestDefoe\Testimonials\Depot\Mirror::class)->sync(is_object($event) ? $event : $models[0]))
-                ->listen('eloquent.deleted: ErnestDefoe\\Depot\\Model\\Review', fn ($event, $models = null) => resolve(\ErnestDefoe\Testimonials\Depot\Mirror::class)->remove(is_object($event) ? $event : $models[0]))
-                ->listen('eloquent.deleted: ErnestDefoe\\Depot\\Model\\File', fn ($event, $models = null) => resolve(Cleanup::class)->subject('depot', (int) (is_object($event) ? $event : $models[0])->id)),
+                ->listen('eloquent.saved: ErnestDefoe\\Depot\\Model\\Review', [Mirror::class, 'saved'])
+                ->listen('eloquent.deleted: ErnestDefoe\\Depot\\Model\\Review', [Mirror::class, 'deleted'])
+                ->listen('eloquent.deleted: ErnestDefoe\\Depot\\Model\\File', [Cleanup::class, 'depotFile']),
         ]),
 
     // The Page Builder blocks only offer the widgets in its editor; the client fetches like every other host.

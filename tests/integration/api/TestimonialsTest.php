@@ -308,6 +308,34 @@ class TestimonialsTest extends TestCase
     }
 
     #[Test]
+    public function the_forum_payload_tells_moderators_the_queue_count_and_no_one_else(): void
+    {
+        [, $mod] = $this->call('GET', '/api', 5);
+        $this->assertSame(1, $mod['data']['attributes']['testimonialsPending']);
+        $this->assertTrue($mod['data']['attributes']['testimonialsCanModerate']);
+
+        [, $member] = $this->call('GET', '/api', 3);
+        $this->assertArrayNotHasKey('testimonialsPending', $member['data']['attributes']);
+        $this->assertFalse($member['data']['attributes']['testimonialsCanModerate']);
+        $this->assertIsArray($member['data']['attributes']['testimonialsAspects']);
+
+        [, $guest] = $this->call('GET', '/api', null);
+        $this->assertFalse($guest['data']['attributes']['testimonialsCanCreate']);
+        $this->assertArrayNotHasKey('testimonialsCreateRefusal', $guest['data']['attributes']);
+    }
+
+    #[Test]
+    public function a_deleted_member_takes_their_testimonials_and_ratings(): void
+    {
+        [$status] = $this->call('DELETE', '/api/users/4', 1);
+        $this->assertSame(204, $status);
+
+        $this->assertSame(0, $this->database()->table('testimonials')->where('user_id', 4)->count());
+        $this->assertSame(0, $this->database()->table('testimonial_ratings')->where('testimonial_id', 2)->count());
+        $this->assertSame(1, $this->database()->table('testimonial_ratings')->where('testimonial_id', 1)->count(), 'other members keep theirs');
+    }
+
+    #[Test]
     public function the_nudge_stops_once_a_member_has_written_one(): void
     {
         $this->setting('ernestdefoe-testimonials.nudge', '1');

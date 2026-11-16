@@ -3,7 +3,6 @@
 namespace ErnestDefoe\Testimonials;
 
 use Flarum\User\User;
-use Illuminate\Database\ConnectionInterface;
 
 /**
  * Everything the forum reads about a testimonial, decided in one place so every way of fetching
@@ -19,7 +18,6 @@ class Presenter
     private array $ratings = [];
 
     public function __construct(
-        private readonly ConnectionInterface $db,
         private readonly Settings $settings,
         private readonly Subjects $subjects,
     ) {
@@ -36,7 +34,7 @@ class Presenter
             $this->ratings[$row->id] = [];
         }
         if ($ids) {
-            foreach ($this->db->table('testimonial_ratings')->whereIn('testimonial_id', $ids)->orderBy('aspect_id')->get() as $r) {
+            foreach (Rating::of($ids)->orderBy('aspect_id')->get() as $r) {
                 $this->ratings[(int) $r->testimonial_id][] = ['id' => (int) $r->aspect_id, 'rating' => (int) $r->rating];
             }
         }

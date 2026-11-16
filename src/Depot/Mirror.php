@@ -67,6 +67,18 @@ class Mirror
         }
     }
 
+    /** `eloquent.saved` on a Depot review: the model, or the model in a payload array. */
+    public function saved(mixed $event, mixed $models = null): void
+    {
+        $this->sync(is_object($event) ? $event : $models[0]);
+    }
+
+    /** `eloquent.deleted` on a Depot review. */
+    public function deleted(mixed $event, mixed $models = null): void
+    {
+        $this->remove(is_object($event) ? $event : $models[0]);
+    }
+
     public function remove(Review $review): void
     {
         if (Testimonial::query()->where('source', 'depot')->where('source_id', $review->id)->delete()) {

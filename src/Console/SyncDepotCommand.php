@@ -2,6 +2,7 @@
 
 namespace ErnestDefoe\Testimonials\Console;
 
+use ErnestDefoe\Testimonials\Depot\Mirror;
 use Flarum\Extension\ExtensionManager;
 use Illuminate\Console\Command;
 
@@ -12,14 +13,14 @@ class SyncDepotCommand extends Command
 
     protected $description = 'Mirror Depot reviews as testimonials, and remove mirrors of reviews that are gone.';
 
-    public function handle(ExtensionManager $extensions): int
+    public function handle(ExtensionManager $extensions, Mirror $mirror): int
     {
         if (! class_exists(\ErnestDefoe\Depot\Model\Review::class) || ! $extensions->isEnabled('ernestdefoe-depot')) {
             $this->info('Depot is not enabled: nothing to do.');
 
             return 0;
         }
-        $count = resolve(\ErnestDefoe\Testimonials\Depot\Mirror::class)->syncAll();
+        $count = $mirror->syncAll();
         $this->info("{$count} Depot reviews are testimonials.");
 
         return 0;

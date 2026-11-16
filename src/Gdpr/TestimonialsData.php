@@ -2,6 +2,7 @@
 
 namespace ErnestDefoe\Testimonials\Gdpr;
 
+use ErnestDefoe\Testimonials\Rating;
 use ErnestDefoe\Testimonials\Testimonial;
 use Flarum\Gdpr\Data\Type;
 
@@ -41,8 +42,7 @@ class TestimonialsData extends Type
     {
         $ids = Testimonial::query()->where('user_id', $this->user->id)->pluck('id')->all();
         if ($ids) {
-            resolve(\Illuminate\Database\ConnectionInterface::class)->table('testimonial_ratings')->whereIn('testimonial_id', $ids)->delete();
-            Testimonial::query()->whereIn('id', $ids)->delete();
+            Rating::deleteWithTestimonials($ids);
         }
     }
 }
