@@ -69,7 +69,7 @@ class TestimonialResource extends AbstractDatabaseResource
     /** @param Builder<Testimonial> $query */
     public function scope(Builder $query, BaseContext $context): void
     {
-        $query->whereVisibleTo($context->getActor())->with('user');
+        $query->whereVisibleTo($context->getActor())->with($this->presenter->relations($context->getActor()));
     }
 
     public function endpoints(): array

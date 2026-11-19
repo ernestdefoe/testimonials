@@ -3,10 +3,20 @@
 namespace ErnestDefoe\Testimonials\Tests\integration\api;
 
 use Carbon\Carbon;
+use ErnestDefoe\Testimonials\Access;
+use ErnestDefoe\Testimonials\Extensions;
+use ErnestDefoe\Testimonials\Presenter;
+use ErnestDefoe\Testimonials\Testimonial;
+use Flarum\Extend;
+use Flarum\Extension\Extension;
+use Flarum\Extension\ExtensionManager;
 use Flarum\Group\Group;
 use Flarum\Testing\integration\RetrievesAuthorizedUsers;
 use Flarum\Testing\integration\TestCase;
 use Flarum\User\User;
+use Illuminate\Contracts\Container\Container;
+use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\Schema\Blueprint;
 use PHPUnit\Framework\Attributes\Test;
 
 class TestimonialsTest extends TestCase
@@ -403,5 +413,94 @@ class TestimonialsTest extends TestCase
         $many = $count();
 
         $this->assertSame($one, $many);
+    }
+
+    /** Trust Levels counts as enabled (it isn't installed for these tests). */
+    private function trustLevelsOn(): void
+    {
+        $this->extend(new class implements Extend\ExtenderInterface {
+            public function extend(Container $container, ?Extension $extension = null): void
+            {
+                $container->bind(Extensions::class, fn (Container $c) => new class($c->make(ExtensionManager::class)) extends Extensions {
+                    public function trustLevels(): bool
+                    {
+                        return true;
+                    }
+                });
+            }
+        });
+    }
+
+    #[Test]
+    public function trust_levels_from_the_old_users_column(): void
+    {
+        $this->trustLevelsOn();
+        $this->setting('ernestdefoe-testimonials.min_trust_level', '2');
+        $container = $this->app()->getContainer();
+        $access = $container->make(Access::class);
+        $presenter = $container->make(Presenter::class);
+        $mod = User::findOrFail(5);
+
+        // The column is gone once Trust Levels moves it, so it's set on the loaded rows here.
+        $member = User::findOrFail(2);
+        $member->setAttribute('trust_level', 1);
+        $this->assertSame('min_trust_level', $access->createRefusal($member));
+        $member->setAttribute('trust_level', 2);
+        $this->assertNull($access->createRefusal($member));
+
+        $row = Testimonial::findOrFail(1);
+        $row->user->setAttribute('trust_level', 3);
+        $this->assertSame(3, $presenter->author($row, $mod)['trustLevel']);
+        $this->assertSame(['user'], $presenter->relations($mod));
+    }
+
+    #[Test]
+    public function trust_levels_from_their_own_table_loaded_once_per_list(): void
+    {
+        require_once __DIR__.'/../../fixtures/TrustState.php';
+        $this->trustLevelsOn();
+        $this->extend(
+            // Trust Levels' table, made the first time (DDL commits on MySQL, so the open test
+            // transaction is reopened before any test rows go in).
+            new class implements Extend\ExtenderInterface {
+                public function extend(Container $container, ?Extension $extension = null): void
+                {
+                    $db = $container->make(ConnectionInterface::class);
+                    $schema = $db->getSchemaBuilder();
+                    if (! $schema->hasTable('trust_states')) {
+                        $schema->create('trust_states', function (Blueprint $table) {
+                            $table->unsignedInteger('user_id')->primary();
+                            $table->unsignedTinyInteger('level')->default(0);
+                        });
+                        if (! $db->getPdo()->inTransaction()) {
+                            $db->getPdo()->beginTransaction();
+                        }
+                    }
+                }
+            },
+            (new Extend\Model(User::class))->hasOne('trustState', \ErnestDefoe\TrustLevels\TrustState::class, 'user_id'),
+        );
+        $this->prepareDatabase(['trust_states' => [['user_id' => 2, 'level' => 2], ['user_id' => 3, 'level' => 3]]]);
+        $this->setting('ernestdefoe-testimonials.min_trust_level', '3');
+        $access = $this->app()->getContainer()->make(Access::class);
+
+        $this->assertSame('min_trust_level', $access->createRefusal(User::findOrFail(2)));
+        $this->assertNull($access->createRefusal(User::findOrFail(3)));
+
+        $db = $this->database();
+        $db->flushQueryLog();
+        $db->enableQueryLog();
+        [, $json] = $this->call('GET', '/api/testimonials?page[limit]=24', 5);
+        $reads = array_filter($db->getQueryLog(), fn (array $q) => str_contains($q['query'], 'trust_states'));
+        $db->disableQueryLog();
+
+        $levels = [];
+        foreach ($json['data'] as $item) {
+            $levels[$item['attributes']['author']['username']] = $item['attributes']['author']['trustLevel'];
+        }
+        // Dana has a row; Lee has none, so Lee is New (0).
+        $this->assertSame(3, $levels['dana'] ?? null);
+        $this->assertSame(0, $levels['secretlee'] ?? null);
+        $this->assertCount(1, $reads);
     }
 }

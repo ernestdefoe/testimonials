@@ -20,7 +20,21 @@ class Presenter
     public function __construct(
         private readonly Settings $settings,
         private readonly Subjects $subjects,
+        private readonly TrustLevel $trust,
     ) {
+    }
+
+    /**
+     * What a list of testimonials loads with each one: the author, and for moderators (who see
+     * the author's trust level) Trust Levels' state row too, so the level costs no query per row.
+     *
+     * @return list<string>
+     */
+    public function relations(User $actor): array
+    {
+        $trust = self::canModerate($actor) ? $this->trust->relation() : null;
+
+        return $trust ? ['user', "user.{$trust}"] : ['user'];
     }
 
     /** @param iterable<Testimonial> $rows */
@@ -71,8 +85,7 @@ class Presenter
             $out['id'] = (int) $user->id;
             $out['commentCount'] = (int) $user->comment_count;
             $out['joinedAt'] = $user->joined_at?->toIso8601String();
-            $level = $user->getAttribute('trust_level');
-            $out['trustLevel'] = $level === null ? null : (int) $level;
+            $out['trustLevel'] = $this->trust->of($user);
         }
 
         return $out;

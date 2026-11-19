@@ -13,7 +13,7 @@ class Access
 {
     public function __construct(
         private readonly Settings $settings,
-        private readonly Extensions $extensions,
+        private readonly TrustLevel $trust,
     ) {
     }
 
@@ -39,7 +39,7 @@ class Access
             return 'min_days';
         }
         $level = $this->settings->int('min_trust_level', 0);
-        if ($level > 0 && $this->extensions->trustLevels() && (int) $actor->getAttribute('trust_level') < $level) {
+        if ($level > 0 && ($have = $this->trust->of($actor)) !== null && $have < $level) {
             return 'min_trust_level';
         }
 
