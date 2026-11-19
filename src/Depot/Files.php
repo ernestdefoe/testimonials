@@ -15,13 +15,25 @@ class Files
     /** The ids of downloads this person may open, as a subquery. */
     public static function visibleIds(User $actor): Builder
     {
-        return \ErnestDefoe\Depot\Model\File::query()->visibleTo($actor)->select('depot_files.id');
+        return self::visible($actor)->select('depot_files.id');
     }
 
     /** An approved download this person may open: one a testimonial can be about. */
     public static function canRate(User $actor, int $id): bool
     {
-        return \ErnestDefoe\Depot\Model\File::query()->visibleTo($actor)
-            ->whereNotNull('depot_files.approved_at')->where('depot_files.id', $id)->exists();
+        return self::visible($actor)->whereNotNull('depot_files.approved_at')->where('depot_files.id', $id)->exists();
+    }
+
+    /**
+     * Depot's own visibility rules. Newer Depot releases keep them in Flarum's ModelVisibility
+     * (whereVisibleTo); 1.5.x and earlier have their own visibleTo scope.
+     */
+    private static function visible(User $actor): Builder
+    {
+        $query = \ErnestDefoe\Depot\Model\File::query();
+
+        return method_exists(\ErnestDefoe\Depot\Model\File::class, 'scopeWhereVisibleTo')
+            ? $query->whereVisibleTo($actor)
+            : $query->visibleTo($actor);
     }
 }
