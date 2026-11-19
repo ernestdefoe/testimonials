@@ -13,8 +13,8 @@ use Illuminate\Database\ConnectionInterface;
  */
 class Subjects
 {
-    /** @var array<string, array{label: string, url: string|null}|null> keyed "type:id" */
-    private array $memo = [];
+    /** Where a row keeps its looked-up subject (a relation slot: never saved). */
+    private const LOADED = 'subjectLabel';
 
     public function __construct(
         private readonly ConnectionInterface $db,
@@ -24,29 +24,34 @@ class Subjects
     }
 
     /**
+     * Looks up the subjects of these rows (those not looked up yet) and keeps each on its row, so
+     * the answer lives exactly as long as the row: one request, never a stale label from an earlier one.
+     *
      * @param iterable<Testimonial> $rows
-     * @param bool $fresh forget earlier lookups first (a new page: a worker can outlive one request)
      */
-    public function prime(iterable $rows, bool $fresh = false): void
+    public function prime(iterable $rows): void
     {
-        if ($fresh) {
-            $this->memo = [];
-        }
+        $todo = [];
         $ids = ['tag' => [], 'depot' => [], 'post' => []];
         foreach ($rows as $row) {
-            if ($row->subject_id && isset($ids[$row->subject_type]) && ! array_key_exists($row->subject_type.':'.$row->subject_id, $this->memo)) {
+            if ($row->relationLoaded(self::LOADED)) {
+                continue;
+            }
+            $todo[] = $row;
+            if ($row->subject_id && isset($ids[$row->subject_type])) {
                 $ids[$row->subject_type][] = (int) $row->subject_id;
             }
         }
 
+        $found = [];
         if ($ids['tag'] && $this->extensions->tags()) {
             foreach ($this->db->table('tags')->whereIn('id', array_unique($ids['tag']))->get(['id', 'name', 'slug']) as $tag) {
-                $this->memo['tag:'.$tag->id] = ['label' => (string) $tag->name, 'url' => $this->url->to('forum')->route('tag', ['slug' => $tag->slug])];
+                $found['tag:'.$tag->id] = ['label' => (string) $tag->name, 'url' => $this->url->to('forum')->route('tag', ['slug' => $tag->slug])];
             }
         }
         if ($ids['depot'] && $this->extensions->depot()) {
-            foreach ($this->db->table('depot_files')->whereIn('id', array_unique($ids['depot']))->get(['id', 'title', 'slug']) as $file) {
-                $this->memo['depot:'.$file->id] = ['label' => (string) $file->title, 'url' => $this->url->to('forum')->path('downloads/f/'.$file->slug)];
+            foreach (Depot\Files::labels(array_unique($ids['depot'])) as $id => $file) {
+                $found['depot:'.$id] = ['label' => $file['title'], 'url' => $this->url->to('forum')->route('depot.file', ['slug' => $file['slug']])];
             }
         }
         if ($ids['post']) {
@@ -55,18 +60,16 @@ class Subjects
                 ->whereIn('posts.id', array_unique($ids['post']))
                 ->get(['posts.id', 'posts.number', 'posts.discussion_id', 'discussions.title', 'discussions.slug']);
             foreach ($posts as $post) {
-                $this->memo['post:'.$post->id] = [
+                $found['post:'.$post->id] = [
                     'label' => (string) $post->title,
                     'url' => $this->url->to('forum')->route('discussion.near', ['id' => $post->discussion_id.($post->slug ? '-'.$post->slug : ''), 'near' => $post->number]),
                 ];
             }
         }
 
-        // Asked and not found (deleted, or its extension switched off): remember that too.
-        foreach ($ids as $type => $list) {
-            foreach ($list as $id) {
-                $this->memo[$type.':'.$id] ??= null;
-            }
+        // Not found (deleted, or its extension switched off) is kept too, as null.
+        foreach ($todo as $row) {
+            $row->setRelation(self::LOADED, $found[$row->subject_type.':'.$row->subject_id] ?? null);
         }
     }
 
@@ -79,7 +82,7 @@ class Subjects
         }
         $id = match (true) {
             $type === 'tag' && $this->extensions->tags() => $this->db->table('tags')->where('slug', $slug)->value('id'),
-            $type === 'depot' && $this->extensions->depot() => $this->db->table('depot_files')->where('slug', $slug)->value('id'),
+            $type === 'depot' && $this->extensions->depot() => Depot\Files::idForSlug($slug),
             default => null,
         };
 
@@ -103,11 +106,10 @@ class Subjects
     {
         $found = null;
         if ($row->subject_type !== 'community' && $row->subject_id) {
-            $key = $row->subject_type.':'.$row->subject_id;
-            if (! array_key_exists($key, $this->memo)) {
+            if (! $row->relationLoaded(self::LOADED)) {
                 $this->prime([$row]);
             }
-            $found = $this->memo[$key] ?? null;
+            $found = $row->getRelation(self::LOADED);
         }
 
         return [

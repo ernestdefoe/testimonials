@@ -5,7 +5,7 @@ import { bespokeSchema } from './settings';
 
 /*
  * Offers the four widgets to every widget host that is present: fof/forum-widgets-core and Bespoke
- * (from an app.mount override, after every initializer), and Page Builder (through its queue, from
+ * (from our last initializer, at priority -100, so theirs have run), and Page Builder (through its queue, from
  * our initializer). None is a build-time import; each is found at runtime, so the bundle is the
  * same with all three installed or none. Registering is not placing: the stock spots stand down
  * only for a mounted copy (placement.ts).

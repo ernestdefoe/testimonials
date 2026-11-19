@@ -42,10 +42,9 @@ class Nudge
      * A testimonial was written or deleted (`eloquent.created` / `eloquent.deleted`): ask its
      * author's "have you written one?" question again next time.
      */
-    public function forget(mixed $event, mixed $models = null): void
+    public function forget(Testimonial $row): void
     {
-        $row = is_object($event) ? $event : $models[0];
-        if ($row instanceof Testimonial && $row->user_id) {
+        if ($row->user_id) {
             $this->cache->forget(self::key((int) $row->user_id));
         }
     }

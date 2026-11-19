@@ -46,6 +46,12 @@ $extenders = [
 
     new Extend\ApiResource(Api\TestimonialResource::class),
 
+    // A page of testimonial notifications: authors, ratings and subjects loaded together.
+    (new Extend\ApiResource(\Flarum\Api\Resource\NotificationResource::class))
+        ->endpoint('index', fn (\Flarum\Api\Endpoint\Index $index) => $index->beforeSerialization(
+            fn (\Flarum\Api\Context $context, array $results) => resolve(Api\NotificationSubjects::class)($context, $results)
+        )),
+
     (new Extend\ErrorHandling())
         ->handler(\ErnestDefoe\Testimonials\Refusal::class, Api\RefusalHandler::class),
 

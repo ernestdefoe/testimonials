@@ -40,6 +40,30 @@ class Files
     }
 
     /**
+     * Titles and slugs of these downloads, by id (labels for testimonials about them; the rows
+     * themselves are only visible where the download is, Scope\Visibility).
+     *
+     * @param int[] $ids
+     * @return array<int, array{title: string, slug: string}>
+     */
+    public static function labels(array $ids): array
+    {
+        $out = [];
+        foreach (\ErnestDefoe\Depot\Model\File::query()->whereIn('id', $ids)->get(['id', 'title', 'slug']) as $file) {
+            $out[(int) $file->id] = ['title' => (string) $file->title, 'slug' => (string) $file->slug];
+        }
+
+        return $out;
+    }
+
+    public static function idForSlug(string $slug): ?int
+    {
+        $id = \ErnestDefoe\Depot\Model\File::query()->where('slug', $slug)->value('id');
+
+        return $id === null ? null : (int) $id;
+    }
+
+    /**
      * Depot's own visibility rules. Newer Depot releases keep them in Flarum's ModelVisibility
      * (whereVisibleTo); 1.5.x and earlier have their own visibleTo scope.
      */

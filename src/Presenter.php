@@ -14,8 +14,8 @@ use Flarum\User\User;
  */
 class Presenter
 {
-    /** @var array<int, list<array{id: int, rating: int}>> */
-    private array $ratings = [];
+    /** Where a row keeps its aspect ratings once read (a relation slot: never saved). */
+    private const RATINGS = 'aspectRatings';
 
     public function __construct(
         private readonly Settings $settings,
@@ -37,22 +37,31 @@ class Presenter
         return $trust ? ['user', "user.{$trust}"] : ['user'];
     }
 
-    /** @param iterable<Testimonial> $rows */
+    /**
+     * Reads the ratings and subjects of these rows (those not read yet) in one query each, and keeps
+     * them on each row: they live as long as the row (one request), so nothing is ever stale.
+     *
+     * @param iterable<Testimonial> $rows
+     */
     public function prime(iterable $rows): void
     {
-        // Always read afresh: a resource (and its presenter) can outlive one request in a
-        // long-running worker, and a rating may have changed since.
-        $ids = [];
+        $todo = [];
         foreach ($rows as $row) {
-            $ids[] = $row->id;
-            $this->ratings[$row->id] = [];
-        }
-        if ($ids) {
-            foreach (Rating::of($ids)->orderBy('aspect_id')->get() as $r) {
-                $this->ratings[(int) $r->testimonial_id][] = ['id' => (int) $r->aspect_id, 'rating' => (int) $r->rating];
+            if (! $row->relationLoaded(self::RATINGS)) {
+                $todo[(int) $row->id] = [];
             }
         }
-        $this->subjects->prime($rows, true);
+        if ($todo) {
+            foreach (Rating::of(array_keys($todo))->orderBy('aspect_id')->get() as $r) {
+                $todo[(int) $r->testimonial_id][] = ['id' => (int) $r->aspect_id, 'rating' => (int) $r->rating];
+            }
+            foreach ($rows as $row) {
+                if (isset($todo[(int) $row->id])) {
+                    $row->setRelation(self::RATINGS, $todo[(int) $row->id]);
+                }
+            }
+        }
+        $this->subjects->prime($rows);
     }
 
     public static function canModerate(User $actor): bool
@@ -94,13 +103,13 @@ class Presenter
     /** @return list<array{id: int, rating: int}> */
     public function aspects(Testimonial $row): array
     {
-        if (! isset($this->ratings[$row->id])) {
+        if (! $row->relationLoaded(self::RATINGS)) {
             $this->prime([$row]);
         }
         // Only aspects the admin still has on (a removed one stops showing; its ratings stay).
         $on = array_flip($this->settings->aspectIds());
 
-        return array_values(array_filter($this->ratings[$row->id], fn ($r) => isset($on[$r['id']])));
+        return array_values(array_filter((array) $row->getRelation(self::RATINGS), fn ($r) => isset($on[$r['id']])));
     }
 
     /** @return array<string, mixed> */

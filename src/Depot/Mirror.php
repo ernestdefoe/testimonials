@@ -70,16 +70,16 @@ class Mirror
         }
     }
 
-    /** `eloquent.saved` on a Depot review: the model, or the model in a payload array. */
-    public function saved(mixed $event, mixed $models = null): void
+    /** `eloquent.saved` on a Depot review (Laravel passes the model). */
+    public function saved(Review $review): void
     {
-        $this->sync(is_object($event) ? $event : $models[0]);
+        $this->sync($review);
     }
 
     /** `eloquent.deleted` on a Depot review. */
-    public function deleted(mixed $event, mixed $models = null): void
+    public function deleted(Review $review): void
     {
-        $this->remove(is_object($event) ? $event : $models[0]);
+        $this->remove($review);
     }
 
     public function remove(Review $review): void

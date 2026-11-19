@@ -382,6 +382,37 @@ class TestimonialsTest extends TestCase
     }
 
     #[Test]
+    public function the_notifications_list_costs_the_same_for_one_testimonial_or_several(): void
+    {
+        $note = fn (int $id, int $testimonial) => ['id' => $id, 'user_id' => 3, 'from_user_id' => null, 'type' => 'testimonialApproved', 'subject_id' => $testimonial, 'data' => null, 'created_at' => Carbon::now()->subMinutes($id), 'is_deleted' => false];
+        $count = function (): int {
+            $db = $this->database();
+            $db->flushQueryLog();
+            $db->enableQueryLog();
+            [$status, $json] = $this->call('GET', '/api/notifications?include=subject', 3);
+            $this->assertSame(200, $status);
+            $n = count($db->getQueryLog());
+            $db->disableQueryLog();
+
+            return $n;
+        };
+
+        // Same kinds on both sides: testimonials about posts, with ratings.
+        $made = function (array $ids) use ($note) {
+            $this->database()->table('testimonials')->insert(array_map(fn ($i) => $this->row($i, 3, ['rating' => 4, 'subject_type' => 'post', 'subject_id' => $i]), $ids));
+            $this->database()->table('testimonial_ratings')->insert(array_map(fn ($i) => ['testimonial_id' => $i, 'aspect_id' => 1, 'rating' => 4], $ids));
+            $this->database()->table('notifications')->insert(array_map(fn ($i) => $note($i, $i), $ids));
+        };
+
+        $this->call('GET', '/api/notifications', 3);
+        $made([40]);
+        $one = $count();
+        $made([41, 42, 43, 44]);
+
+        $this->assertSame($one, $count());
+    }
+
+    #[Test]
     public function the_nudge_stops_once_a_member_has_written_one(): void
     {
         $this->setting('ernestdefoe-testimonials.nudge', '1');

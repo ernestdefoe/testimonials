@@ -49,30 +49,22 @@ class Cleanup
         $this->moderation->changed();
     }
 
-    /**
-     * A deleted tag (from the `eloquent.deleted` event, which passes the model, or the model in a
-     * payload array depending on how it was dispatched).
-     */
-    public function tag(mixed $event, mixed $models = null): void
+    /** A deleted tag (`eloquent.deleted`, which passes the model). */
+    public function tag(object $tag): void
     {
-        $this->subject('tag', (int) self::model($event, $models)->id);
+        $this->subject('tag', (int) $tag->id);
     }
 
-    /** A deleted Depot download. */
-    public function depotFile(mixed $event, mixed $models = null): void
+    /** A deleted Depot download (`eloquent.deleted`, which passes the model). */
+    public function depotFile(object $file): void
     {
-        $this->subject('depot', (int) self::model($event, $models)->id);
+        $this->subject('depot', (int) $file->id);
     }
 
     /** Post and discussion deletions: the payload doesn't matter, the orphans are found afresh. */
     public function postsGone(): void
     {
         $this->posts();
-    }
-
-    private static function model(mixed $event, mixed $models): object
-    {
-        return is_object($event) ? $event : $models[0];
     }
 
     /**
