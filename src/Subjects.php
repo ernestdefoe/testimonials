@@ -3,6 +3,7 @@
 namespace ErnestDefoe\Testimonials;
 
 use Flarum\Http\UrlGenerator;
+use Flarum\User\User;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -22,9 +23,15 @@ class Subjects
     ) {
     }
 
-    /** @param iterable<Testimonial> $rows */
-    public function prime(iterable $rows): void
+    /**
+     * @param iterable<Testimonial> $rows
+     * @param bool $fresh forget earlier lookups first (a new page: a worker can outlive one request)
+     */
+    public function prime(iterable $rows, bool $fresh = false): void
     {
+        if ($fresh) {
+            $this->memo = [];
+        }
         $ids = ['tag' => [], 'depot' => [], 'post' => []];
         foreach ($rows as $row) {
             if ($row->subject_id && isset($ids[$row->subject_type]) && ! array_key_exists($row->subject_type.':'.$row->subject_id, $this->memo)) {
@@ -77,6 +84,18 @@ class Subjects
         };
 
         return $id === null ? null : (int) $id;
+    }
+
+    /**
+     * Downloads the form's picker offers for $term (none without Depot, or under two letters).
+     *
+     * @return list<array{id: int, title: string}>
+     */
+    public function depotMatches(User $actor, string $term): array
+    {
+        $term = mb_substr(trim($term), 0, 80);
+
+        return $this->extensions->depot() && mb_strlen($term) >= 2 ? Depot\Files::search($actor, $term) : [];
     }
 
     /** @return array{type: string, id: int|null, label: string|null, url: string|null} */

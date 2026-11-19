@@ -5,14 +5,12 @@ namespace ErnestDefoe\Testimonials;
 use Flarum\Settings\SettingsRepositoryInterface;
 
 /**
- * Testimonials' settings, read with their defaults (extend.php declares the same defaults
- * with string literals, for the admin page).
+ * Testimonials' settings, typed. The defaults live in one place, extend.php (Extend\Settings::default),
+ * so a setting nobody has saved reads as its default here too.
  */
 class Settings
 {
     public const PREFIX = 'ernestdefoe-testimonials.';
-
-    public const DEFAULT_ASPECTS = '[{"id":1,"name":"Customer service"},{"id":2,"name":"Quality"},{"id":3,"name":"Value"},{"id":4,"name":"Speed of support"}]';
 
     /** A taken-down testimonial's words are kept this long for an undo, then deleted. */
     public const REMOVED_DAYS = 30;
@@ -24,43 +22,39 @@ class Settings
     {
     }
 
-    public function bool(string $key, bool $default): bool
+    public function bool(string $key): bool
     {
-        $value = $this->settings->get(self::PREFIX.$key);
-
-        return $value === null || $value === '' ? $default : (bool) $value;
+        return (bool) $this->settings->get(self::PREFIX.$key);
     }
 
-    public function int(string $key, int $default): int
+    public function int(string $key): int
     {
-        $value = $this->settings->get(self::PREFIX.$key);
-
-        return $value === null || $value === '' ? $default : (int) $value;
+        return (int) $this->settings->get(self::PREFIX.$key);
     }
 
     public function ratings(): bool
     {
-        return $this->bool('ratings', true);
+        return $this->bool('ratings');
     }
 
     public function anonymous(): bool
     {
-        return $this->bool('anonymous', true);
+        return $this->bool('anonymous');
     }
 
     public function depotSource(): bool
     {
-        return $this->bool('depot_source', true);
+        return $this->bool('depot_source');
     }
 
     public function minLength(): int
     {
-        return max(1, $this->int('min_length', 40));
+        return max(1, $this->int('min_length'));
     }
 
     public function maxLength(): int
     {
-        return min(2000, max($this->minLength(), $this->int('max_length', 600)));
+        return min(2000, max($this->minLength(), $this->int('max_length')));
     }
 
     /**
@@ -72,7 +66,7 @@ class Settings
     public function aspects(): array
     {
         $raw = $this->settings->get(self::PREFIX.'aspects');
-        $list = json_decode($raw === null ? self::DEFAULT_ASPECTS : (string) $raw, true);
+        $list = json_decode((string) $raw, true);
         $out = [];
         foreach (is_array($list) ? $list : [] as $row) {
             $id = (int) ($row['id'] ?? 0);

@@ -46,12 +46,6 @@ $extenders = [
 
     new Extend\ApiResource(Api\TestimonialResource::class),
 
-    // Not CRUD, so not on the resource: a moderation action that answers with the resource, and a
-    // cached aggregate (counts and averages) that no single testimonial carries.
-    (new Extend\Routes('api'))
-        ->post('/testimonials/{id:\d+}/moderate', 'testimonials.moderate', Api\ModerateController::class)
-        ->get('/testimonials-summary', 'testimonials.summary', Api\SummaryController::class),
-
     (new Extend\ErrorHandling())
         ->handler(\ErnestDefoe\Testimonials\Refusal::class, Api\RefusalHandler::class),
 
@@ -112,10 +106,6 @@ $extenders = [
         ->command(Console\PurgeCommand::class)
         ->schedule(Console\PurgeCommand::class, function (ScheduledEvent $event) {
             $event->daily()->withoutOverlapping();
-        })
-        ->command(Console\SyncDepotCommand::class)
-        ->schedule(Console\SyncDepotCommand::class, function (ScheduledEvent $event) {
-            $event->daily()->withoutOverlapping();
         }),
 
     // A member's testimonials in their data export; erased with them.
@@ -131,6 +121,12 @@ $extenders = [
                 ->listen('eloquent.saved: ErnestDefoe\\Depot\\Model\\Review', [Mirror::class, 'saved'])
                 ->listen('eloquent.deleted: ErnestDefoe\\Depot\\Model\\Review', [Mirror::class, 'deleted'])
                 ->listen('eloquent.deleted: ErnestDefoe\\Depot\\Model\\File', [Cleanup::class, 'depotFile']),
+            // Daily, to catch anything the listeners missed (and on demand).
+            (new Extend\Console())
+                ->command(Console\SyncDepotCommand::class)
+                ->schedule(Console\SyncDepotCommand::class, function (ScheduledEvent $event) {
+                    $event->daily()->withoutOverlapping();
+                }),
         ]),
 
     // The Page Builder blocks only offer the widgets in its editor; the client fetches like every other host.

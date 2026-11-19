@@ -52,8 +52,8 @@ export default class TestimonialsPage extends Page {
     app
       // The score and chips are extras: without them the page still lists everything, so a failure
       // here stays quiet rather than putting an error over a working page.
-      .request<Summary>({ method: 'GET', url: api('testimonials-summary'), params: { subjects: 1 }, errorHandler: () => {} } as any)
-      .then((s) => (this.summary = s))
+      .request<{ meta: Summary }>({ method: 'GET', url: api('testimonials/summary'), params: { filter: { subjects: 1 } }, errorHandler: () => {} } as any)
+      .then((doc) => (this.summary = doc.meta))
       .catch(() => {})
       .finally(() => m.redraw());
     app.store
@@ -84,6 +84,7 @@ export default class TestimonialsPage extends Page {
         this.rows = offset ? [...this.rows, ...rows] : [...rows];
         this.more = !!rows.payload?.links?.next;
       })
+      // Flarum's request handler has already shown the error; the list keeps what it had.
       .catch(() => {})
       .finally(() => {
         if (ticket !== this.ticket) return;

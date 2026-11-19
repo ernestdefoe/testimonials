@@ -273,8 +273,8 @@ export default class ShareModal extends FormModal<ShareModalAttrs> {
       return;
     }
     app
-      .request<any>({ method: 'GET', url: api('depot/browse'), params: { q }, errorHandler: () => {} } as any)
-      .then((body) => (this.found = (body?.files || []).slice(0, 8).map((f: any) => ({ id: Number(f.id), title: String(f.title) }))))
+      .request<any>({ method: 'GET', url: api('testimonials/depot-files'), params: { filter: { q } }, errorHandler: () => {} } as any)
+      .then((body) => (this.found = (body?.meta?.files || []).map((f: any) => ({ id: Number(f.id), title: String(f.title) }))))
       .catch(() => (this.found = []))
       .finally(() => m.redraw());
   }
@@ -433,6 +433,7 @@ export default class ShareModal extends FormModal<ShareModalAttrs> {
         const live = saved.status() === 'approved';
         app.alerts.show({ type: 'success' }, this.wordingOnly ? t('share.saved_wording') : live ? t('share.saved_live') : t('share.saved_pending'));
       })
+      // alertError has already shown what went wrong; the form stays open to try again.
       .catch(() => {})
       .finally(() => {
         this.loading = false;

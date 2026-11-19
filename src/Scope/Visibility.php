@@ -53,6 +53,7 @@ class Visibility
                     });
                 });
             } else {
+                // Nothing at all (the builder has no "match none"; no columns, so no prefix to add).
                 $q->whereRaw('1 = 0');
             }
 

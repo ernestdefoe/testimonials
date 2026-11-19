@@ -32,8 +32,13 @@ class Mirror
 
     public function sync(Review $review, bool $announce = true): void
     {
+        $this->apply($review, Testimonial::query()->where('source', 'depot')->where('source_id', $review->id)->first(), $announce);
+    }
+
+    /** Brings the mirror ($row, or none yet) in step with the review. */
+    private function apply(Review $review, ?Testimonial $row, bool $announce): void
+    {
         $body = trim((string) $review->body);
-        $row = Testimonial::query()->where('source', 'depot')->where('source_id', $review->id)->first();
 
         if ($body === '' || (int) $review->rating < self::MIN_RATING) {
             $row?->delete();
@@ -88,8 +93,11 @@ class Mirror
     public function syncAll(): int
     {
         Review::query()->orderBy('id')->chunkById(200, function ($reviews) {
+            // One query for the chunk's mirrors, not one per review.
+            $mirrors = Testimonial::query()->where('source', 'depot')
+                ->whereIn('source_id', $reviews->pluck('id')->all())->get()->keyBy('source_id');
             foreach ($reviews as $review) {
-                $this->sync($review, false);
+                $this->apply($review, $mirrors->get($review->id), false);
             }
         });
 

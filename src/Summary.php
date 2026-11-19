@@ -44,7 +44,11 @@ class Summary
             return $hit['data'];
         }
         $data = $this->build($actor, $type, $id, $bySubject);
-        $this->cache->put($key, ['v' => $version, 'data' => $data], self::TTL);
+        // Only answers with something in them are kept: any id can be asked for, so caching empty
+        // ones would let a crawler fill the cache with keys for subjects that don't exist.
+        if (($data['count'] ?? 0) > 0) {
+            $this->cache->put($key, ['v' => $version, 'data' => $data], self::TTL);
+        }
 
         return $data;
     }

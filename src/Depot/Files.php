@@ -25,6 +25,21 @@ class Files
     }
 
     /**
+     * Approved downloads this person may open whose title starts with $term, for the form's picker.
+     *
+     * @return list<array{id: int, title: string}>
+     */
+    public static function search(User $actor, string $term, int $limit = 8): array
+    {
+        $like = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $term).'%';
+
+        return self::visible($actor)->whereNotNull('depot_files.approved_at')
+            ->where('depot_files.title', 'like', $like)
+            ->orderBy('depot_files.title')->take($limit)->get(['depot_files.id', 'depot_files.title'])
+            ->map(fn ($file) => ['id' => (int) $file->id, 'title' => (string) $file->title])->values()->all();
+    }
+
+    /**
      * Depot's own visibility rules. Newer Depot releases keep them in Flarum's ModelVisibility
      * (whereVisibleTo); 1.5.x and earlier have their own visibleTo scope.
      */

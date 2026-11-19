@@ -300,7 +300,8 @@ class TestimonialsTest extends TestCase
     #[Test]
     public function the_summary_counts_live_testimonials_only(): void
     {
-        [$status, $json] = $this->call('GET', '/api/testimonials-summary?subjects=1', null);
+        [$status, $json] = $this->call('GET', '/api/testimonials/summary?filter[subjects]=1', null);
+        $json = $json['meta'] ?? [];
 
         $this->assertSame(200, $status);
         $this->assertSame(2, $json['count']);
@@ -313,8 +314,8 @@ class TestimonialsTest extends TestCase
 
         // A change shows up for guests at once (the cached answer is versioned).
         $this->call('POST', '/api/testimonials/3/moderate', 5, ['action' => 'approve']);
-        [, $json] = $this->call('GET', '/api/testimonials-summary', null);
-        $this->assertSame(3, $json['count']);
+        [, $json] = $this->call('GET', '/api/testimonials/summary', null);
+        $this->assertSame(3, $json['meta']['count'] ?? null);
     }
 
     #[Test]
@@ -364,6 +365,20 @@ class TestimonialsTest extends TestCase
         $this->assertSame('community', $row(1)->subject_type);
         $this->assertNull($row(1)->subject_id);
         $this->assertSame('post', $row(2)->subject_type, 'a testimonial about a post that is still there keeps it');
+    }
+
+    #[Test]
+    public function a_summary_of_nothing_is_not_cached(): void
+    {
+        $cache = $this->app()->getContainer()->make(\Illuminate\Contracts\Cache\Repository::class);
+
+        [$status, $json] = $this->call('GET', '/api/testimonials/summary?filter[subject]=depot&filter[subjectId]=999', null);
+        $this->assertSame(200, $status);
+        $this->assertSame(0, $json['meta']['count'] ?? null);
+        $this->assertNull($cache->get('ernestdefoe-testimonials.summary.depot.999'));
+
+        $this->call('GET', '/api/testimonials/summary', null);
+        $this->assertNotNull($cache->get('ernestdefoe-testimonials.summary.all.0'));
     }
 
     #[Test]

@@ -34,8 +34,8 @@ export function moderate(row: Testimonial, action: string, extra: Record<string,
       let model = row;
       try {
         model = app.store.pushPayload(payload) as unknown as Testimonial;
-      } catch (e) {
-        console.error('[testimonials] could not read the answer', e);
+      } catch {
+        // The change is saved; if the answer can't be read into the store, the next load shows it.
       }
       changed();
       return model;
@@ -51,8 +51,8 @@ export function changed(): void {
   listeners.forEach((fn) => {
     try {
       fn();
-    } catch (e) {
-      console.error('[testimonials] a refresh failed', e);
+    } catch {
+      // One widget failing to refresh must not stop the others; it asks again when next drawn.
     }
   });
 }

@@ -52,7 +52,7 @@ class Presenter
                 $this->ratings[(int) $r->testimonial_id][] = ['id' => (int) $r->aspect_id, 'rating' => (int) $r->rating];
             }
         }
-        $this->subjects->prime($rows);
+        $this->subjects->prime($rows, true);
     }
 
     public static function canModerate(User $actor): bool

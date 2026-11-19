@@ -31,14 +31,14 @@ class Access
         if ($actor->hasPermission('testimonials.moderate')) {
             return null;
         }
-        if ((int) $actor->comment_count < $this->settings->int('min_posts', 0)) {
+        if ((int) $actor->comment_count < $this->settings->int('min_posts')) {
             return 'min_posts';
         }
-        $days = $this->settings->int('min_days', 0);
+        $days = $this->settings->int('min_days');
         if ($days > 0 && (! $actor->joined_at || $actor->joined_at->gt(Carbon::now()->subDays($days)))) {
             return 'min_days';
         }
-        $level = $this->settings->int('min_trust_level', 0);
+        $level = $this->settings->int('min_trust_level');
         if ($level > 0 && ($have = $this->trust->of($actor)) !== null && $have < $level) {
             return 'min_trust_level';
         }

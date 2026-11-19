@@ -2,20 +2,23 @@
 
 namespace ErnestDefoe\Testimonials\Listener;
 
+use ErnestDefoe\Testimonials\Event\Withdrawn;
 use ErnestDefoe\Testimonials\Moderation;
 use ErnestDefoe\Testimonials\Rating;
 use ErnestDefoe\Testimonials\Testimonial;
 use Flarum\Post\Post;
 use Flarum\User\Event\Deleting as UserDeleting;
+use Illuminate\Contracts\Events\Dispatcher;
 
 /**
- * What happens to testimonials when what they point at goes away. The foreign keys cover the
- * author where the database enforces them (SQLite may not), so it's done here too.
+ * What happens to testimonials when what they point at goes away. The author's foreign key would
+ * cascade too; doing it here as well means it doesn't depend on how the database was set up.
  */
 class Cleanup
 {
     public function __construct(
         private readonly Moderation $moderation,
+        private readonly Dispatcher $events,
     ) {
     }
 
@@ -29,14 +32,21 @@ class Cleanup
         }
     }
 
-    /** A deleted tag or download takes the testimonials about it. */
+    /**
+     * A deleted tag or download takes the testimonials about it. The live ones fire Withdrawn
+     * first, as any other way of taking one down does (Renown takes back the XP).
+     */
     public function subject(string $type, int $id): void
     {
-        $ids = Testimonial::query()->where('subject_type', $type)->where('subject_id', $id)->pluck('id')->all();
-        if ($ids) {
-            Rating::deleteWithTestimonials($ids);
-            $this->moderation->changed();
+        $rows = Testimonial::query()->where('subject_type', $type)->where('subject_id', $id)->get();
+        if ($rows->isEmpty()) {
+            return;
         }
+        foreach ($rows->where('status', 'approved') as $row) {
+            $this->events->dispatch(new Withdrawn($row));
+        }
+        Rating::deleteWithTestimonials($rows->modelKeys());
+        $this->moderation->changed();
     }
 
     /**

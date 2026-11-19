@@ -7,6 +7,8 @@ use ErnestDefoe\Testimonials\Event\Withdrawn;
 use Flarum\Post\Post;
 use Flarum\User\Exception\PermissionDeniedException;
 use Flarum\User\User;
+use Illuminate\Contracts\Cache\LockProvider;
+use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\ConnectionInterface;
 
@@ -26,6 +28,7 @@ class Writer
         private readonly Extensions $extensions,
         private readonly Moderation $moderation,
         private readonly Dispatcher $events,
+        private readonly Cache $cache,
     ) {
     }
 
@@ -39,39 +42,45 @@ class Writer
             throw new Refusal('no_consent');
         }
 
-        [$type, $id] = $this->subject($in, $actor);
-        $taken = Testimonial::query()->where('user_id', $actor->id)->where('source', 'native')
-            ->where('subject_type', $type)->where('status', '!=', 'removed');
-        $id === null ? $taken->whereNull('subject_id') : $taken->where('subject_id', $id);
-        if ($taken->exists()) {
-            throw new Refusal('already_written');
-        }
-        if (Testimonial::query()->where('user_id', $actor->id)->where('status', 'pending')->count() >= self::PENDING_LIMIT) {
-            throw new Refusal('pending_limit');
-        }
+        // One write at a time per member: the "already written" and pending-limit checks and the
+        // save happen together, so two quick submits can't both pass the checks.
+        $approve = $this->exclusive((int) $actor->id, function () use ($row, $in, $actor): bool {
+            [$type, $id] = $this->subject($in, $actor);
+            $taken = Testimonial::query()->where('user_id', $actor->id)->where('source', 'native')
+                ->where('subject_type', $type)->where('status', '!=', 'removed');
+            $id === null ? $taken->whereNull('subject_id') : $taken->where('subject_id', $id);
+            if ($taken->exists()) {
+                throw new Refusal('already_written');
+            }
+            if (Testimonial::query()->where('user_id', $actor->id)->where('status', 'pending')->count() >= self::PENDING_LIMIT) {
+                throw new Refusal('pending_limit');
+            }
 
-        $row->user_id = $actor->id;
-        $row->source = 'native';
-        $row->subject_type = $type;
-        $row->subject_id = $id;
-        $row->consent_at = Carbon::now();
-        $this->fill($row, $in, true);
+            $row->user_id = $actor->id;
+            $row->source = 'native';
+            $row->subject_type = $type;
+            $row->subject_id = $id;
+            $row->consent_at = Carbon::now();
+            $this->fill($row, $in, true);
 
-        $approve = $this->access->autoApproves($actor);
-        $row->status = $approve ? 'approved' : 'pending';
-        if ($approve) {
-            $row->approved_by = $actor->id;
-            $row->approved_at = Carbon::now();
-        }
+            $approve = $this->access->autoApproves($actor);
+            $row->status = $approve ? 'approved' : 'pending';
+            if ($approve) {
+                $row->approved_by = $actor->id;
+                $row->approved_at = Carbon::now();
+            }
 
-        $aspects = $this->aspects($in);
-        $this->db->transaction(function () use ($row, $aspects) {
-            $row->save();
-            $this->saveAspects($row, $aspects);
+            $aspects = $this->aspects($in);
+            $this->db->transaction(function () use ($row, $aspects) {
+                $row->save();
+                $this->saveAspects($row, $aspects);
+            });
+
+            return $approve;
         });
 
         if ($approve) {
-            $this->moderation->approved($row, $actor, false);
+            $this->moderation->approved($row, $actor);
         }
     }
 
@@ -263,5 +272,22 @@ class Writer
                 $aspects,
             ));
         }
+    }
+
+    /**
+     * Runs $work holding this member's write lock (waits up to 5 seconds for an earlier submit).
+     *
+     * @template T
+     * @param callable(): T $work
+     * @return T
+     */
+    private function exclusive(int $user, callable $work): mixed
+    {
+        $store = $this->cache->getStore();
+        if (! $store instanceof LockProvider) {
+            return $work();
+        }
+
+        return $store->lock("ernestdefoe-testimonials.write.{$user}", 10)->block(5, $work);
     }
 }

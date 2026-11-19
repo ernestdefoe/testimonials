@@ -8,6 +8,7 @@ use ErnestDefoe\Testimonials\Moderation;
 use ErnestDefoe\Testimonials\Presenter;
 use ErnestDefoe\Testimonials\Settings;
 use ErnestDefoe\Testimonials\Subjects;
+use ErnestDefoe\Testimonials\Summary;
 use ErnestDefoe\Testimonials\Testimonial;
 use ErnestDefoe\Testimonials\Writer;
 use Flarum\Api\Context;
@@ -18,6 +19,7 @@ use Flarum\User\Exception\PermissionDeniedException;
 use Flarum\User\User;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Arr;
 use Tobyz\JsonApiServer\Context as BaseContext;
 use Tobyz\JsonApiServer\Pagination\Pagination;
 
@@ -33,13 +35,21 @@ use Tobyz\JsonApiServer\Pagination\Pagination;
  * POST   /api/testimonials   Writer::create        PATCH /api/testimonials/{id}   Writer::update
  * DELETE /api/testimonials/{id}  moderators
  *
- * The queue's actions are POST /api/testimonials/{id}/moderate (ModerateController).
+ * POST   /api/testimonials/{id}/moderate {action, reason?, until?}  Moderation::act: approve | feature |
+ *        unfeature | decline | spam | up | down (moderators), remove | restore (the author or a moderator).
+ *        Answers with the testimonial, so the store updates like any other save.
+ * GET    /api/testimonials/depot-files?filter[q]=…  the form's download picker (Subjects::depotMatches), in `meta.files`.
+ * GET    /api/testimonials/summary?filter[subject]=…&filter[subjectId]=N (or [slug]=…)&filter[subjects]=1  Summary::for, in `meta`:
+ *        count, average, 5→1 spread and each aspect's average over the live ones the viewer may see.
  *
  * @extends AbstractDatabaseResource<Testimonial>
  */
 class TestimonialResource extends AbstractDatabaseResource
 {
     public const PAGE = 24;
+
+    /** The listing's page, so results() can trim the extra row it fetched (see PeekPagination). */
+    private ?PeekPagination $page = null;
 
     /** Attributes the form and the queue send; Writer applies them together. */
     private const INPUTS = ['headline', 'body', 'rating', 'byline', 'consent', 'consentExternal', 'subjectType', 'subjectId', 'aspects', 'hiddenByAuthor'];
@@ -53,6 +63,7 @@ class TestimonialResource extends AbstractDatabaseResource
         private readonly Moderation $moderation,
         private readonly Dispatcher $dispatcher,
         private readonly Settings $settings,
+        private readonly Summary $summary,
     ) {
     }
 
@@ -75,8 +86,29 @@ class TestimonialResource extends AbstractDatabaseResource
     public function endpoints(): array
     {
         return [
+            // Before Show, so /summary isn't read as an id.
+            Endpoint\Endpoint::make('summary')
+                ->route('GET', '/summary')
+                ->action(fn (Context $context) => ['meta' => $this->summaryFor($context)]),
+            // The form's download picker: approved Depot downloads whose title starts with filter[q].
+            Endpoint\Endpoint::make('depotFiles')
+                ->route('GET', '/depot-files')
+                ->authenticated()
+                ->action(fn (Context $context) => ['meta' => ['files' => $this->subjects->depotMatches(
+                    $context->getActor(),
+                    (string) Arr::get((array) Arr::get($context->request->getQueryParams(), 'filter', []), 'q', ''),
+                )]]),
+            Endpoint\Endpoint::make('moderate')
+                ->route('POST', '/{id}/moderate')
+                ->authenticated()
+                ->action(function (Context $context) {
+                    $body = (array) $context->body();
+                    $this->moderation->act($context->model, (string) ($body['action'] ?? ''), $body, $context->getActor());
+
+                    return $context->model;
+                }),
             tap(Endpoint\Index::make()->paginate(self::PAGE, 50), function (Endpoint\Index $index) {
-                $index->paginationResolver = fn (BaseContext $context) => new PeekPagination($context, self::PAGE, 50);
+                $index->paginationResolver = fn (BaseContext $context) => $this->page = new PeekPagination($context, self::PAGE, 50);
             })
                 ->query(fn (Builder $query, ?Pagination $pagination, Context $context, array $filters) => $this->listing($query, $pagination, $context, $filters)),
             Endpoint\Show::make(),
@@ -84,6 +116,19 @@ class TestimonialResource extends AbstractDatabaseResource
             Endpoint\Update::make()->authenticated(),
             Endpoint\Delete::make()->authenticated(),
         ];
+    }
+
+    /** @return array<string, mixed> */
+    private function summaryFor(Context $context): array
+    {
+        $query = (array) Arr::get($context->request->getQueryParams(), 'filter', []);
+        $subject = Arr::get($query, 'subject') ? (string) Arr::get($query, 'subject') : null;
+        $id = Arr::get($query, 'subjectId');
+        if (! is_numeric($id) && $subject && ($slug = Arr::get($query, 'slug'))) {
+            $id = $this->subjects->idForSlug($subject, (string) $slug) ?? 0;
+        }
+
+        return $this->summary->for($context->getActor(), $subject, is_numeric($id) ? (int) $id : null, (bool) Arr::get($query, 'subjects'));
     }
 
     public function fields(): array
@@ -223,11 +268,12 @@ class TestimonialResource extends AbstractDatabaseResource
         if (! empty($filters['featured'])) {
             $query->featuredNow()->orderBy('testimonials.featured_order');
         } elseif (($filters['sort'] ?? '') === 'featured') {
-            // 🚨 Raw SQL gets no table prefix: the columns go through the grammar.
+            // 🚨 Raw SQL gets no table prefix: the columns go through the grammar. `IS TRUE` reads a
+            // boolean column the same on MySQL (tinyint), PostgreSQL and SQLite, with no bound flag.
             $grammar = $query->getQuery()->getGrammar();
             $featured = $grammar->wrap('testimonials.is_featured');
             $until = $grammar->wrap('testimonials.featured_until');
-            $query->orderByRaw("CASE WHEN {$featured} = ? AND ({$until} IS NULL OR {$until} > ?) THEN 0 ELSE 1 END", [true, \Carbon\Carbon::now()])
+            $query->orderByRaw("CASE WHEN {$featured} IS TRUE AND ({$until} IS NULL OR {$until} > ?) THEN 0 ELSE 1 END", [\Carbon\Carbon::now()])
                 ->orderBy('testimonials.featured_order');
         }
         $query->orderByDesc('testimonials.created_at')->orderByDesc('testimonials.id');
@@ -237,7 +283,7 @@ class TestimonialResource extends AbstractDatabaseResource
     public function results(object $query, BaseContext $context): iterable
     {
         $rows = $query->get();
-        $page = PeekPagination::for($context);
+        $page = $this->page?->request === $context->request ? $this->page : null;
         if ($page) {
             $page->more = $rows->count() > $page->limit;
             $rows = $rows->take($page->limit);

@@ -23,13 +23,13 @@ class Nudge
 
     public function shows(User $actor): bool
     {
-        if ($actor->isGuest() || ! $this->settings->bool('nudge', false) || ! $this->access->canCreate($actor)) {
+        if ($actor->isGuest() || ! $this->settings->bool('nudge') || ! $this->access->canCreate($actor)) {
             return false;
         }
-        if ((int) $actor->comment_count < $this->settings->int('nudge_posts', 25)) {
+        if ((int) $actor->comment_count < $this->settings->int('nudge_posts')) {
             return false;
         }
-        $days = $this->settings->int('nudge_days', 30);
+        $days = $this->settings->int('nudge_days');
         if ($days > 0 && (! $actor->joined_at || $actor->joined_at->gt(Carbon::now()->subDays($days)))) {
             return false;
         }

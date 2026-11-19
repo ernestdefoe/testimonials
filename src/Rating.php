@@ -42,8 +42,8 @@ class Rating extends AbstractModel
     }
 
     /**
-     * Deletes these testimonials and their ratings (the foreign key cascades on MySQL and
-     * PostgreSQL; SQLite runs without foreign keys unless asked, so the ratings go first).
+     * Deletes these testimonials and their ratings. The foreign key would cascade; deleting the
+     * ratings first means it doesn't depend on the database enforcing it.
      *
      * @param int[] $ids
      */

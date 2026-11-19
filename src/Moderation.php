@@ -130,11 +130,8 @@ class Moderation
     }
 
     /** Written by someone whose testimonials need no review: live at once, no "approved" alert. */
-    public function approved(Testimonial $row, User $actor, bool $notify): void
+    public function approved(Testimonial $row, User $actor): void
     {
-        if ($notify) {
-            $this->notify(new Notification\ApprovedBlueprint($row), $row, $actor);
-        }
         $this->events->dispatch(new Approved($row, $actor));
         $this->changed();
     }
@@ -169,13 +166,16 @@ class Moderation
             return;
         }
         [$ids[$at], $ids[$at + $step]] = [$ids[$at + $step], $ids[$at]];
-        foreach ($featured->keyBy('id') as $id => $model) {
-            $position = array_search($id, $ids, true) + 1;
-            if ($model->featured_order !== $position) {
-                $model->featured_order = $position;
-                $model->save();
+        // All or nothing: a half-applied renumbering would leave two at one position.
+        $row->getConnection()->transaction(function () use ($featured, $ids) {
+            foreach ($featured->keyBy('id') as $id => $model) {
+                $position = array_search($id, $ids, true) + 1;
+                if ($model->featured_order !== $position) {
+                    $model->featured_order = $position;
+                    $model->save();
+                }
             }
-        }
+        });
         $row->featured_order = array_search($row->id, $ids, true) + 1;
     }
 

@@ -1,18 +1,16 @@
 import app from 'flarum/forum/app';
-import { extend, override } from 'flarum/common/extend';
-import Extend from 'flarum/common/extenders';
+import { extend } from 'flarum/common/extend';
 import type ItemList from 'flarum/common/utils/ItemList';
 import LinkButton from 'flarum/common/components/LinkButton';
 import Button from 'flarum/common/components/Button';
-import Notification from 'flarum/forum/components/Notification';
 import PostControls from 'flarum/forum/utils/PostControls';
 import type Mithril from 'mithril';
-import Testimonial from './Testimonial';
 import TestimonialsWidget, { startTicker } from './widgets/Widget';
 import { hostedElsewhere } from './widgets/placement';
 import { registerHosts, registerPageBuilder } from './widgets/hosts';
-import { openShare, ui } from './share';
+import { openShare } from './share';
 import { t, tx } from './util';
+import { NOTIFICATIONS } from './extend';
 
 export { default as Testimonial } from './Testimonial';
 export { default as TestimonialsWidget } from './widgets/Widget';
@@ -23,51 +21,7 @@ export { openShare } from './share';
  * the queue, the profile list and the form are one chunk (./components), fetched when first needed.
  */
 
-const NOTIFICATIONS: Record<string, string> = {
-  testimonialApproved: 'fas fa-check',
-  testimonialFeatured: 'fas fa-star',
-  testimonialDeclined: 'fas fa-xmark',
-  testimonialEdited: 'fas fa-pen',
-};
-
-function notificationComponent(type: string) {
-  return class extends Notification {
-    icon() {
-      return NOTIFICATIONS[type];
-    }
-    href() {
-      return app.session.user ? app.route('user.testimonials', { username: app.session.user.slug() }) : app.route('testimonials');
-    }
-    content() {
-      return t(`notification.${type}`);
-    }
-    excerpt() {
-      const subject: any = (this.attrs.notification as any).subject();
-      return subject?.attribute?.('declineReason') || subject?.attribute?.('body') || '';
-    }
-  };
-}
-
-const page = (pick: (chunk: any) => any) => () => ui().then(async (chunk) => (await chunk.loadCore(), { default: pick(chunk) }));
-
-const extenders = [
-  new Extend.Store().add('testimonials', Testimonial),
-  new Extend.Routes()
-    .add(
-      'testimonials',
-      '/testimonials',
-      page((chunk) => chunk.TestimonialsPage)
-    )
-    .add(
-      'testimonials.queue',
-      '/testimonials/queue',
-      page((chunk) => chunk.QueuePage)
-    )
-    .add('user.testimonials', '/u/:username/testimonials', () => ui().then(async (chunk) => ({ default: await chunk.userTestimonialsPage() }))),
-  Object.keys(NOTIFICATIONS).reduce((ext, type) => ext.add(type, notificationComponent(type)), new Extend.Notification()),
-];
-
-export { extenders as extend };
+export { default as extend } from './extend';
 
 const NUDGE_KEY = 'ernestdefoe-testimonials.nudge-dismissed';
 
@@ -167,13 +121,17 @@ app.initializers.add('ernestdefoe-testimonials', () => {
     }
   });
 
-  // After every initializer (Page Builder exposes its registry in its own), before the first draw.
-  override(app, 'mount', function (original: (...args: any[]) => unknown, ...args: any[]) {
+});
+
+// Last of the initializers (Page Builder exposes its registry in its own), before the first draw.
+app.initializers.add(
+  'ernestdefoe-testimonials-hosts',
+  () => {
     registerHosts();
     startTicker();
-    return original(...args);
-  });
-});
+  },
+  -100
+);
 
 function nudge(): Mithril.Children {
   return (

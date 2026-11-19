@@ -38,7 +38,7 @@ class ForumFields
                 ->visible(fn ($forum, Context $context) => $this->canModerate($context))
                 ->get(fn () => Testimonial::query()->where('status', 'pending')->count()),
             Schema\Boolean::make('testimonialsNudge')
-                ->visible(fn ($forum, Context $context) => ! $context->getActor()->isGuest() && $this->settings->bool('nudge', false))
+                ->visible(fn ($forum, Context $context) => ! $context->getActor()->isGuest() && $this->settings->bool('nudge'))
                 ->get(fn ($forum, Context $context) => $this->nudge->shows($context->getActor())),
             Schema\Arr::make('testimonialsAspects')
                 ->get(fn () => $this->settings->aspects()),

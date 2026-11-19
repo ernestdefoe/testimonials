@@ -4,7 +4,6 @@ namespace ErnestDefoe\Testimonials\Api;
 
 use Tobyz\JsonApiServer\Context;
 use Tobyz\JsonApiServer\Pagination\OffsetPagination;
-use WeakMap;
 
 /**
  * Offset paging that knows whether there's a next page without counting every match: it fetches
@@ -15,19 +14,13 @@ class PeekPagination extends OffsetPagination
 {
     public ?bool $more = null;
 
-    /** @var WeakMap<object, self>|null by request */
-    private static ?WeakMap $pages = null;
+    /** The request this page belongs to (the resource keeps the latest one and checks it's this). */
+    public readonly object $request;
 
     public function __construct(Context $context, int $defaultLimit = 20, int $maxLimit = 50)
     {
         parent::__construct($context, $defaultLimit, $maxLimit);
-        self::$pages ??= new WeakMap();
-        self::$pages[$context->request] = $this;
-    }
-
-    public static function for(Context $context): ?self
-    {
-        return self::$pages[$context->request] ?? null;
+        $this->request = $context->request;
     }
 
     /** @param \Illuminate\Database\Eloquent\Builder<\ErnestDefoe\Testimonials\Testimonial> $query */
