@@ -8,6 +8,7 @@ use Flarum\Post\Post;
 use Flarum\User\Exception\PermissionDeniedException;
 use Flarum\User\User;
 use Illuminate\Contracts\Cache\LockProvider;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\ConnectionInterface;
@@ -20,6 +21,9 @@ class Writer
 {
     /** A member can have this many waiting for review at once. */
     public const PENDING_LIMIT = 3;
+
+    /** Seconds a submit waits for the member's previous one to finish saving. */
+    public const LOCK_WAIT = 5;
 
     public function __construct(
         private readonly ConnectionInterface $db,
@@ -275,7 +279,7 @@ class Writer
     }
 
     /**
-     * Runs $work holding this member's write lock (waits up to 5 seconds for an earlier submit).
+     * Runs $work holding this member's write lock (waits up to LOCK_WAIT seconds for an earlier submit).
      *
      * @template T
      * @param callable(): T $work
@@ -288,6 +292,11 @@ class Writer
             return $work();
         }
 
-        return $store->lock("ernestdefoe-testimonials.write.{$user}", 10)->block(5, $work);
+        try {
+            return $store->lock("ernestdefoe-testimonials.write.{$user}", 10)->block(self::LOCK_WAIT, $work);
+        } catch (LockTimeoutException) {
+            // An earlier submit still holds it: say so (409), never a server error.
+            throw new Refusal('busy', 409);
+        }
     }
 }

@@ -4,12 +4,10 @@ namespace ErnestDefoe\Testimonials\Tests\integration\api;
 
 use Carbon\Carbon;
 use ErnestDefoe\Testimonials\Access;
-use ErnestDefoe\Testimonials\Extensions;
 use ErnestDefoe\Testimonials\Presenter;
 use ErnestDefoe\Testimonials\Testimonial;
 use Flarum\Extend;
 use Flarum\Extension\Extension;
-use Flarum\Extension\ExtensionManager;
 use Flarum\Group\Group;
 use Flarum\Testing\integration\RetrievesAuthorizedUsers;
 use Flarum\Testing\integration\TestCase;
@@ -413,6 +411,23 @@ class TestimonialsTest extends TestCase
     }
 
     #[Test]
+    public function a_submit_while_the_last_one_is_still_saving_is_told_to_try_again(): void
+    {
+        $store = $this->app()->getContainer()->make(\Illuminate\Contracts\Cache\Repository::class)->getStore();
+        $this->assertInstanceOf(\Illuminate\Contracts\Cache\LockProvider::class, $store);
+        $held = $store->lock('ernestdefoe-testimonials.write.2', 30);
+        $this->assertTrue($held->get());
+
+        [$status, $json] = $this->call('POST', '/api/testimonials', 2, ['body' => self::QUOTE, 'consent' => true]);
+        $this->assertSame(409, $status);
+        $this->assertSame('busy', $json['errors'][0]['code'] ?? null);
+
+        $held->release();
+        [$status] = $this->call('POST', '/api/testimonials', 2, ['body' => self::QUOTE, 'consent' => true]);
+        $this->assertSame(201, $status);
+    }
+
+    #[Test]
     public function the_nudge_stops_once_a_member_has_written_one(): void
     {
         $this->setting('ernestdefoe-testimonials.nudge', '1');
@@ -464,17 +479,7 @@ class TestimonialsTest extends TestCase
     /** Trust Levels counts as enabled (it isn't installed for these tests). */
     private function trustLevelsOn(): void
     {
-        $this->extend(new class implements Extend\ExtenderInterface {
-            public function extend(Container $container, ?Extension $extension = null): void
-            {
-                $container->bind(Extensions::class, fn (Container $c) => new class($c->make(ExtensionManager::class)) extends Extensions {
-                    public function trustLevels(): bool
-                    {
-                        return true;
-                    }
-                });
-            }
-        });
+        $this->extend(new \ErnestDefoe\Testimonials\Extend\Integration('trustLevels'));
     }
 
     #[Test]

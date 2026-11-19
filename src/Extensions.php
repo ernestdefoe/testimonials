@@ -2,35 +2,32 @@
 
 namespace ErnestDefoe\Testimonials;
 
-use Flarum\Extension\ExtensionManager;
-
-/** Which optional extensions are on, asked once per request (the manager reads its own cache). */
+/**
+ * Which optional extensions Testimonials works with right now. Nothing here asks the extension
+ * manager: extend.php switches each one on from its Extend\Conditional block (Extend\Integration).
+ */
 class Extensions
 {
-    /** @var array<string, bool> */
-    private array $memo = [];
+    /** @var array<string, true> */
+    private array $on = [];
 
-    public function __construct(private readonly ExtensionManager $extensions)
+    public function enable(string $name): void
     {
+        $this->on[$name] = true;
     }
 
     public function tags(): bool
     {
-        return $this->on('flarum-tags', \Flarum\Tags\Tag::class);
+        return isset($this->on['tags']);
     }
 
     public function depot(): bool
     {
-        return $this->on('ernestdefoe-depot', 'ErnestDefoe\\Depot\\Model\\File');
+        return isset($this->on['depot']);
     }
 
     public function trustLevels(): bool
     {
-        return $this->on('ernestdefoe-trust-levels', null);
-    }
-
-    private function on(string $id, ?string $class): bool
-    {
-        return $this->memo[$id] ??= ($class === null || class_exists($class)) && $this->extensions->isEnabled($id);
+        return isset($this->on['trustLevels']);
     }
 }

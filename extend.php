@@ -105,6 +105,7 @@ $extenders = [
     // A deleted tag takes the testimonials about it.
     (new Extend\Conditional())
         ->whenExtensionEnabled('flarum-tags', fn () => [
+            new \ErnestDefoe\Testimonials\Extend\Integration('tags'),
             (new Extend\Event())->listen('eloquent.deleted: Flarum\\Tags\\Tag', [Cleanup::class, 'tag']),
         ]),
 
@@ -123,6 +124,7 @@ $extenders = [
     // Depot reviews as testimonials, kept in step as they're written and deleted.
     (new Extend\Conditional())
         ->whenExtensionEnabled('ernestdefoe-depot', fn () => [
+            new \ErnestDefoe\Testimonials\Extend\Integration('depot'),
             (new Extend\Event())
                 ->listen('eloquent.saved: ErnestDefoe\\Depot\\Model\\Review', [Mirror::class, 'saved'])
                 ->listen('eloquent.deleted: ErnestDefoe\\Depot\\Model\\Review', [Mirror::class, 'deleted'])
@@ -133,6 +135,12 @@ $extenders = [
                 ->schedule(Console\SyncDepotCommand::class, function (ScheduledEvent $event) {
                     $event->daily()->withoutOverlapping();
                 }),
+        ]),
+
+    // A minimum trust level to write one, and the level beside each author for moderators.
+    (new Extend\Conditional())
+        ->whenExtensionEnabled('ernestdefoe-trust-levels', fn () => [
+            new \ErnestDefoe\Testimonials\Extend\Integration('trustLevels'),
         ]),
 
     // The Page Builder blocks only offer the widgets in its editor; the client fetches like every other host.
