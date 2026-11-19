@@ -120,7 +120,6 @@ app.initializers.add('ernestdefoe-testimonials', () => {
       items.add('testimonialsCarousel', <TestimonialsWidget kind="carousel" host="stock-top" />, 105);
     }
   });
-
 });
 
 // Last of the initializers (Page Builder exposes its registry in its own), before the first draw.

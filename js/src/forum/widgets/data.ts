@@ -55,7 +55,8 @@ export function summary(params: Record<string, string | number>): Summary | null
   return get(
     summaries,
     JSON.stringify(params),
-    () => app
+    () =>
+      app
         .request<{ meta: Summary }>({ method: 'GET', url: api('testimonials/summary'), params: { filter: params }, errorHandler: () => {} } as any)
         .then((doc) => doc.meta),
     { count: 0, rated: 0, average: null, spread: {}, aspects: [] }

@@ -52,7 +52,12 @@ export default class TestimonialsPage extends Page {
     app
       // The score and chips are extras: without them the page still lists everything, so a failure
       // here stays quiet rather than putting an error over a working page.
-      .request<{ meta: Summary }>({ method: 'GET', url: api('testimonials/summary'), params: { filter: { subjects: 1 } }, errorHandler: () => {} } as any)
+      .request<{ meta: Summary }>({
+        method: 'GET',
+        url: api('testimonials/summary'),
+        params: { filter: { subjects: 1 } },
+        errorHandler: () => {},
+      } as any)
       .then((doc) => (this.summary = doc.meta))
       .catch(() => {})
       .finally(() => m.redraw());
